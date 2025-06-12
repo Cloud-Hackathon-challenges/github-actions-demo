@@ -37,7 +37,7 @@ jobs:
         if: matrix.project == 'api'
         run: |
           echo "Linting API: Kontrol ediliyor..."
-          grep -rIn '[^;]$' . --include=*.js || echo "Semikolon kontrolü tamamlandı"
+          grep -rIn '[^;]$' . --include=*.js || echo "Semikolon kontrolü tamamlandın"
 
   docker-build-push:
     name: Build and Push Docker Images
