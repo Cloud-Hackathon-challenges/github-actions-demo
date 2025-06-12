@@ -116,7 +116,7 @@ jobs:
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         run: terraform apply -auto-approve
 
-      - name: Verify Infrastructure Deployment
+      - name: Verify Infrastructure Deployment 
         run: |
           echo "Überprüfe die erstellte Infrastruktur in Azure..."
           # Beispiel: az group show --name your-resource-group-name --query name -o tsv
