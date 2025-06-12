@@ -1,135 +1,3 @@
-# name: Node.js CI, Terraform Deploy and Docker Build
-
-# on:
-#   push:
-#     branches:
-#       - main
-#   pull_request:
-#     branches:
-#       - main
-
-# jobs:
-#   test: 
-#     runs-on: ubuntu-latest
-#     strategy:
-#       matrix:
-#         node-version: [20]
-#         project: [frontend, api]
-#     defaults:
-#       run:
-#         working-directory: application/${{ matrix.project }}
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
-
-#       - name: Use Node.js ${{ matrix.node-version }}
-#         uses: actions/setup-node@v3
-#         with:
-#           node-version: ${{ matrix.node-version }}
-#           cache: 'npm'
-#           cache-dependency-path: application/${{ matrix.project }}/package-lock.json
-
-#       - name: Install dependencies
-#         run: npm ci
-
-#       - name: Run tests
-#         run: npm test || echo "tests failed (not blocking)" # Show test failures but do not block workflow
-
-#       - name: Run audit (show security warnings, but continue)
-#         run: npm audit || true
-
-#       - name: Simple lint check for API project
-#         if: matrix.project == 'api'
-#         run: |
-#           echo "Linting API: Kontrol ediliyor..."
-#           grep -rIn '[^;]$' . --include=*.js || echo "Semikolon-Kontrolle abgeschlossen" # Checks missing semicolons
-
-#   docker-build-push:
-#     name: Build and Push Docker Images
-#     runs-on: ubuntu-latest
-#     needs: test
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
-
-#       - name: Login to Azure Container Registry
-#         uses: azure/docker-login@v1
-#         with:
-#           login-server: ${{ secrets.ACR_LOGIN_SERVER }}
-#           username: ${{ secrets.ACR_USERNAME }}
-#           password: ${{ secrets.ACR_PASSWORD }}
-
-#       - name: Build and Push frontend image
-#         run: |
-#           docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest ./application/frontend
-#           docker push ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest
-
-#       - name: Build and Push api image
-#         run: |
-#           docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/api:latest ./application/api
-#           docker push ${{ secrets.ACR_LOGIN_SERVER }}/api:latest
-
-#       - name: Build and Push db-seed image
-#         run: |
-#           if [ -d "./application/db-seed" ]; then
-#             docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/db-seed:latest ./application/db-seed
-#             docker push ${{ secrets.ACR_LOGIN_SERVER }}/db-seed:latest
-#           else
-#             echo "Verzeichnis ./application/db-seed existiert nicht. Überspringe den Build des db-seed Images."
-#           fi
-
-#   terraform-deploy-infra:
-#     name: Deploy Azure Infrastructure with Terraform
-#     runs-on: ubuntu-latest
-#     needs: docker-build-push
-#     defaults:
-#       run:
-#         working-directory: ./terraform
-#     steps:
-#       - name: Checkout repository
-#         uses: actions/checkout@v4
-
-#       - name: Azure Login
-#         uses: azure/login@v1
-#         with:
-#           #creds: ${{ secrets.AZURE_CREDENTIALS }}
-#            creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
-
-  
-
-#       - name: Setup Terraform
-#         uses: hashicorp/setup-terraform@v2
-#         with:
-#           terraform_version: 1.5.7
-
-#       - name: Terraform Init
-#         id: init
-#         run: terraform init
-
-#       - name: Terraform Plan
-#         id: plan
-#         run: terraform plan -no-color
-#         continue-on-error: true
-
-#       - name: Show Terraform Plan
-#         if: steps.plan.outcome == 'failure'
-#         run: echo "${{ steps.plan.outputs.stdout }}"
-
-#       - name: Terraform Apply
-#         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
-#         run: terraform apply -auto-approve
-
-#       - name: Verify Infrastructure Deployment 
-#         run: |
-#           echo "Überprüfe die erstellte Infrastruktur in Azure..."
-#           # Beispiel: az group show --name your-resource-group-name --query name -o tsv
-
-#       - name: Azure Logout
-#         run: az logout
-
-
-# # sh
-
 name: Node.js CI, Terraform Deploy and Docker Build
 
 on:
@@ -141,7 +9,7 @@ on:
       - main
 
 jobs:
-  test:
+  test: 
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -174,7 +42,7 @@ jobs:
         if: matrix.project == 'api'
         run: |
           echo "Linting API: Kontrol ediliyor..."
-          grep -rIn '[^;]$' . --include=*.js || echo "Semikolon-Kontrolle tamamlandı." # Checks missing semicolons
+          grep -rIn '[^;]$' . --include=*.js || echo "Semikolon-Kontrolle abgeschlossen" # Checks missing semicolons
 
   docker-build-push:
     name: Build and Push Docker Images
@@ -224,37 +92,40 @@ jobs:
       - name: Azure Login
         uses: azure/login@v1
         with:
-          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
-          terraform_version: 1.5.7 # Belirttiğiniz Terraform sürümü
+          terraform_version: 1.5.7
 
       - name: Terraform Init
         id: init
         run: terraform init
+        working-directory: ./terraform
 
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color
         continue-on-error: true
+        working-directory: ./terraform
 
       - name: Show Terraform Plan
         if: steps.plan.outcome == 'failure'
         run: echo "${{ steps.plan.outputs.stdout }}"
+        working-directory: ./terraform
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         run: terraform apply -auto-approve
+        working-directory: ./terraform
 
-      - name: Verify Infrastructure Deployment
+      - name: Verify Infrastructure Deployment 
         run: |
-          echo "Azure'da oluşturulan altyapı kontrol ediliyor..."
-          # Buraya, altyapınızın doğru bir şekilde dağıtıldığını doğrulamak için
-          # Azure CLI komutları eklemelisiniz.
-          # Örnek: az group show --name your-resource-group-name --query name -o tsv
-          # Örnek: az resource list --resource-group your-resource-group-name --query "[].name" -o tsv
+          echo "Überprüfe die erstellte Infrastruktur in Azure..."
+          # Beispiel: az group show --name your-resource-group-name --query name -o tsv
+        working-directory: ./terraform
 
       - name: Azure Logout
         run: az logout
+        working-directory: ./terraform
