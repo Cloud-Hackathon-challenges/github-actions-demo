@@ -52,7 +52,7 @@ jobs:
         with:
           login-server: ${{ secrets.ACR_LOGIN_SERVER }}
           username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+          password: ${{ secrets.ACR_PASSWORD }} 
 
       - name: Build and Push frontend image
         run: |
