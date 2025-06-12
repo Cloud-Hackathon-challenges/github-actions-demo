@@ -40,7 +40,7 @@ jobs:
           grep -rIn '[^;]$' . --include=*.js || echo "Semikolon kontrolü tamamlandın mi"
 
   docker-build-push:
-    name: Build and Push Docker Images
+    name: Build and Push Docker Images 
     runs-on: ubuntu-latest
     needs: test
     steps:
