@@ -67,7 +67,7 @@ jobs:
       - name: Build and Push api image
         run: |
           docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/api:latest ./application/api
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/api:latest
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/api:latest 
 
       - name: Build and Push db-seed image
         run: |
