@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  test:
+  test: 
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -123,3 +123,6 @@ jobs:
 
       - name: Azure Logout
         run: az logout
+
+
+# sh
