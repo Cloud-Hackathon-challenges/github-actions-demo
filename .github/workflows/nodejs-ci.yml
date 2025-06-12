@@ -71,3 +71,4 @@ jobs:
             docker push ${{ secrets.ACR_LOGIN_SERVER }}/db-seed:latest
           else
             echo "Directory ./application/db-seed does not exist. Skipping db-seed image build."
+          fi  
