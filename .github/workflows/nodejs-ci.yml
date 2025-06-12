@@ -54,8 +54,9 @@ jobs:
         run: |
           docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/api:latest ./application/api
           docker push ${{ secrets.ACR_LOGIN_SERVER }}/api:latest
+          
 
-      - name: Build and Push db-seed image
+      - name: Build and Push db-seed image 2
         run: |
           docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/db-seed:latest ./application/db-seed
           docker push ${{ secrets.ACR_LOGIN_SERVER }}/db-seed:latest
