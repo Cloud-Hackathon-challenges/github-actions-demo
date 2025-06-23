@@ -21,7 +21,7 @@ services:
     environment:
       PORT: 4000
       # MONGO_URI: ${MONGO_URI}
-      MONGO_URI: mongodb://mongodb:27017/dobook
+      MONGO_URI: mongodb://mongodb:27017/dobook 
 
   frontend:
     build:
