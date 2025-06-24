@@ -34,7 +34,7 @@ variable "resource_group_location" {
 variable "acr_name" {
   description = "Name of the Azure Container Registry"
   type        = string
-  default     = "team1acrmanual"
+  default     = "team1acrmanual2"
 }
 
 variable "acr_sku" {
