@@ -22,7 +22,7 @@ variable "tenant_id" {
 variable "resource_group_name" {
   description = "Name of the resource group"
   type        = string
-  default     = "team1-rg-manual"
+  default     = "team1-rg-manual2"
 }
 
 variable "resource_group_location" {
