@@ -53,6 +53,8 @@ jobs:
       AZURE_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZURE_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+    outputs:
+      acr_name: ${{ steps.set-acr-name.outputs.acr_name }}
     defaults:
       run:
         working-directory: ./terraform
@@ -96,10 +98,9 @@ jobs:
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         run: terraform apply -auto-approve -var-file="dev.tfvars"
 
-      - name: Output ACR Name for Next Job
+      - name: Set ACR Name as Output
         id: set-acr-name
-        run: |
-          echo "ACR_NAME=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
+        run: echo "acr_name=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
 
       - name: Azure Logout
         run: az logout
@@ -108,12 +109,9 @@ jobs:
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
     needs: terraform-deploy-infra
+    env:
+      ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_name }}.azurecr.io
     steps:
-      - name: Get ACR Name from Terraform Output
-        id: get-acr-name
-        run: |
-          echo "ACR_LOGIN_SERVER=${{ needs.terraform-deploy-infra.outputs.acr_name }}.azurecr.io" >> $GITHUB_ENV
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -131,8 +129,8 @@ jobs:
 
       - name: Build and Push api image
         run: |
-          docker build -t ${{ env.ACR2_LOGIN_SERVER }}/api:latest ./application/api
-          docker push ${{ env.ACR2_LOGIN_SERVER }}/api:latest
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/api:latest ./application/api
+          docker push ${{ env.ACR_LOGIN_SERVER }}/api:latest
 
       - name: Build and Push db-seed image
         run: |
