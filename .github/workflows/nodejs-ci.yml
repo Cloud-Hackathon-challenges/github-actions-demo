@@ -73,11 +73,11 @@ jobs:
       - name: Create dev.tfvars from GitHub Secrets
         run: |
           cat <<EOF > dev.tfvars
-          client_id       = "${{ secrets.AZURE_CLIENT_ID }}"
-          client_secret   = "${{ secrets.AZURE_CLIENT_SECRET }}"
-          tenant_id       = "${{ secrets.AZURE_TENANT_ID }}"
-          subscription_id = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          EOF
+client_id       = "${{ secrets.AZURE_CLIENT_ID }}"
+client_secret   = "${{ secrets.AZURE_CLIENT_SECRET }}"
+tenant_id       = "${{ secrets.AZURE_TENANT_ID }}"
+subscription_id = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+EOF
 
       - name: Terraform Init
         run: terraform init
@@ -85,7 +85,6 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -var-file="dev.tfvars"
-        # continue-on-error kaldırıldı, hata varsa apply yapılmaz.
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
@@ -114,7 +113,7 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      - name: Build and Push frontend images
+      - name: Build and Push frontend image
         run: |
           docker build -t ${{ env.ACR_LOGIN_SERVER }}/frontend:latest ./application/frontend
           docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:latest
