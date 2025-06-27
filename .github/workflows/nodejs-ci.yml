@@ -101,8 +101,8 @@ jobs:
       - name: Set ACR Name as Output
         id: set-acr-name
         run: |
-          acr=$(terraform output -raw acr_name | grep -Eo '^[a-zA-Z0-9-]+$')
-          echo "acr_name=$acr" >> $GITHUB_OUTPUT
+          echo "acr_name=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
+      
       
       
 
