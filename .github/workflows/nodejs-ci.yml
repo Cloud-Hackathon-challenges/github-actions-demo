@@ -80,44 +80,22 @@ jobs:
           EOF
 
       - name: Terraform Init
-        id: init
         run: terraform init
 
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -var-file="dev.tfvars"
-        continue-on-error: true
+        # continue-on-error kaldırıldı, hata varsa apply yapılmaz.
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         run: terraform apply -auto-approve -var-file="dev.tfvars"
 
-      - name: Set ACR Name as Output
-        id: set-acr-name # This ID MUST match the one referenced in 'outputs'
-        run: |
-          # Get the raw output for acr_name from Terraform
-          # Assuming 'terraform output -raw acr_name' gives just the base name (e.g., 'myregistry')
-          ACR_NAME=$(terraform output -raw acr_name)
-
-          # Optional: Strip any potential whitespace/newlines if Terraform output has them
-          CLEAN_ACR_NAME=$(echo "$ACR_NAME" | tr -d '[:space:]')
-
-          # Important: Add a check to ensure the output is not empty
-          if [ -z "$CLEAN_ACR_NAME" ]; then
-            echo "Error: Terraform output for 'acr_name' is empty. Cannot determine ACR name."
-            exit 1
-          fi
-
-          # Set the cleaned ACR name as a job output variable
-          echo "acr_name=$CLEAN_ACR_NAME" >> "$GITHUB_OUTPUT"
-          echo "::debug::ACR name set to: $CLEAN_ACR_NAME" # Debugging output
-
-
       - name: Azure Logout
         run: az logout
 
     outputs:
-      acr_name: ${{ steps.set-acr-name.outputs.acr_name }}
+      acr_name: ${{ steps.terraform_apply.outputs.acr_name || 'team1acrmanual' }}
 
   docker-build-push:
     name: Build and Push Docker Images
@@ -132,25 +110,25 @@ jobs:
       - name: Login to Azure Container Registry
         uses: azure/docker-login@v1
         with:
-          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          login-server: ${{ env.ACR_LOGIN_SERVER }}
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
       - name: Build and Push frontend image
         run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest ./application/frontend
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/frontend:latest ./application/frontend
+          docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:latest
 
       - name: Build and Push api image
         run: |
-          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/api:latest ./application/api
-          docker push ${{ secrets.ACR_LOGIN_SERVER }}/api:latest
+          docker build -t ${{ env.ACR_LOGIN_SERVER }}/api:latest ./application/api
+          docker push ${{ env.ACR_LOGIN_SERVER }}/api:latest
 
       - name: Build and Push db-seed image
         run: |
           if [ -d "./application/db-seed" ]; then
-            docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/db-seed:latest ./application/db-seed
-            docker push ${{ secrets.ACR_LOGIN_SERVER }}/db-seed:latest
+            docker build -t ${{ env.ACR_LOGIN_SERVER }}/db-seed:latest ./application/db-seed
+            docker push ${{ env.ACR_LOGIN_SERVER }}/db-seed:latest
           else
             echo "Verzeichnis ./application/db-seed existiert nicht. Überspringe den Build des db-seed Images."
           fi
