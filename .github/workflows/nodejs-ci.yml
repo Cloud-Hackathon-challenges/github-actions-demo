@@ -100,7 +100,10 @@ jobs:
 
       - name: Set ACR Name as Output
         id: set-acr-name
-        run: echo "acr_name=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
+        run: |
+          acr=$(terraform output -raw acr_name 2>/dev/null)
+          echo "acr_name=$acr" >> $GITHUB_OUTPUT
+      
 
       - name: Azure Logout
         run: az logout
