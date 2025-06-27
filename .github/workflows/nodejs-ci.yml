@@ -66,12 +66,12 @@ jobs:
         run: terraform apply -auto-approve -var-file="dev.tfvars"
 
       - name: Set ACR Name as Output
-        id: set-acr-name # This ID must match the 'outputs' definition above
+        id: set-acr-name
         run: |
           # Get the raw output from Terraform. This should be 'team1acrmanual2'
           ACR_RAW_NAME=$(terraform output -raw acr_name)
           
-          # Clean the raw output to ensure only the name remains, stripping any whitespace or extra characters
+          # Clean the raw output to ensure only the name remains, stripping any whitespace or extra characters.
           # The regex here will capture letters, numbers, and hyphens. Adjust if your ACR name can have other chars.
           CLEAN_ACR_NAME=$(echo "$ACR_RAW_NAME" | grep -Eo '^[a-zA-Z0-9-]+$')
           
