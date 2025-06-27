@@ -98,13 +98,6 @@ jobs:
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         run: terraform apply -auto-approve -var-file="dev.tfvars"
 
-      - name: Set ACR Name as Output
-        id: set-acr-name
-        run: |
-          echo "acr_name=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
-      
-      
-      
 
       - name: Azure Logout
         run: az logout
