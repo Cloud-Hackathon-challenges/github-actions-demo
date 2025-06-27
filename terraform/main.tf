@@ -28,6 +28,3 @@ resource "azurerm_container_registry" "rcteamdev" {
   admin_enabled       = var.acr_admin_enabled
 }
 
-output "acr_name" {
-  value = azurerm_container_registry.rcteamdev.name
-}

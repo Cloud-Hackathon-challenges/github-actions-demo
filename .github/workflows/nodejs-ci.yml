@@ -98,6 +98,18 @@ jobs:
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         run: terraform apply -auto-approve -var-file="dev.tfvars"
 
+      - name: Set ACR Name as Output
+        id: set-acr-name
+        run: |
+          acr=$(terraform output -raw acr_name)
+          acr=$(echo "$acr" | tr -d '\n\r ') # Remove whitespace
+          if [ -z "$acr" ]; then
+            echo "Error: Terraform output for acr_name is empty."
+            exit 1
+          fi
+          echo "acr_name=$acr" >> $GITHUB_OUTPUT
+          echo "Discovered ACR name: $acr" # For debugging  
+
 
       - name: Azure Logout
         run: az logout
