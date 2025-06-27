@@ -114,7 +114,7 @@ jobs:
           username: ${{ secrets.ACR_USERNAME }}
           password: ${{ secrets.ACR_PASSWORD }}
 
-      - name: Build and Push frontend image
+      - name: Build and Push frontend images
         run: |
           docker build -t ${{ env.ACR_LOGIN_SERVER }}/frontend:latest ./application/frontend
           docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:latest
