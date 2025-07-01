@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  test:
+  test: 
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -33,7 +33,7 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm test || echo "tests failed (not blocking)"
+        run: npm test || echo "tests failed (not blocking)" # Show test failures but do not block workflow
 
       - name: Run audit (show security warnings, but continue)
         run: npm audit || true
@@ -42,20 +42,57 @@ jobs:
         if: matrix.project == 'api'
         run: |
           echo "Linting API: Kontrol ediliyor..."
-          grep -rIn '[^;]$' . --include=*.js || echo "Semikolon-Kontrolle abgeschlossen"
+          grep -rIn '[^;]$' . --include=*.js || echo "Semikolon-Kontrolle abgeschlossen" # Checks missing semicolons
+
+  docker-build-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Login to Azure Container Registry
+        uses: azure/docker-login@v1
+        with:
+          login-server: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and Push frontend image
+        run: |
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest ./application/frontend
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/frontend:latest
+
+      - name: Build and Push api image
+        run: |
+          docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/api:latest ./application/api
+          docker push ${{ secrets.ACR_LOGIN_SERVER }}/api:latest 
+
+      - name: Build and Push db-seed image
+        run: |
+          if [ -d "./application/db-seed" ]; then
+            docker build -t ${{ secrets.ACR_LOGIN_SERVER }}/db-seed:latest ./application/db-seed
+            docker push ${{ secrets.ACR_LOGIN_SERVER }}/db-seed:latest
+          else
+            echo "Verzeichnis ./application/db-seed existiert nicht. Überspringe den Build des db-seed Images."
+          fi
 
   terraform-deploy-infra:
     name: Deploy Azure Infrastructure with Terraform
     runs-on: ubuntu-latest
-    needs: test
+    needs: docker-build-push
+
     env:
       AZURE_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
       AZURE_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
       AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
       AZURE_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+
     defaults:
       run:
         working-directory: ./terraform
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -80,55 +117,26 @@ jobs:
           EOF
 
       - name: Terraform Init
+        id: init
         run: terraform init
 
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -var-file="dev.tfvars"
-        # continue-on-error kaldırıldı, hata varsa apply yapılmaz.
- 
+        continue-on-error: true
+
+      - name: Show Terraform Plan
+        if: steps.plan.outcome == 'failure'
+        run: echo "${{ steps.plan.outputs.stdout }}"
+
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         run: terraform apply -auto-approve -var-file="dev.tfvars"
 
+      - name: Verify Infrastructure Deployment 
+        run: |
+          echo "Überprüfe die erstellte Infrastruktur in Azure..."
+          # Beispiel: az group show --name your-resource-group-name --query name -o tsv
+
       - name: Azure Logout
         run: az logout
-
-    outputs:
-      acr_name: ${{ steps.terraform_apply.outputs.acr_name || 'team1acrmanual' }}
-
-  docker-build-push:
-    name: Build and Push Docker Images
-    runs-on: ubuntu-latest
-    needs: terraform-deploy-infra
-    env:
-      ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_name }}.azurecr.io
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Login to Azure Container Registry
-        uses: azure/docker-login@v1
-        with:
-          login-server: ${{ env.ACR_LOGIN_SERVER }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
-
-      - name: Build and Push frontend image
-        run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/frontend:latest ./application/frontend
-          docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:latest
-
-      - name: Build and Push api image
-        run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/api:latest ./application/api
-          docker push ${{ env.ACR_LOGIN_SERVER }}/api:latest
-
-      - name: Build and Push db-seed image
-        run: |
-          if [ -d "./application/db-seed" ]; then
-            docker build -t ${{ env.ACR_LOGIN_SERVER }}/db-seed:latest ./application/db-seed
-            docker push ${{ env.ACR_LOGIN_SERVER }}/db-seed:latest
-          else
-            echo "Verzeichnis ./application/db-seed existiert nicht. Überspringe den Build des db-seed Images."
-          fi
