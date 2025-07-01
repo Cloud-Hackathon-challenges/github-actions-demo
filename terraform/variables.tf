@@ -49,7 +49,3 @@ variable "acr_admin_enabled" {
   default     = true
 }
 
-variable "prefix" {
-  type = string
-
-}
