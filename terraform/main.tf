@@ -21,7 +21,7 @@ resource "azurerm_resource_group" "rg-registry" {
 }
 
 resource "azurerm_service_plan" "asp" {
-  name                = "asp"
+  name                = "asp432"
   location            = azurerm_resource_group.rg-registry.location
   resource_group_name = azurerm_resource_group.rg-registry.name
   sku_name            = "S1"
