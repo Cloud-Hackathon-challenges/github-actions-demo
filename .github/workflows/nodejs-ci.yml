@@ -86,7 +86,7 @@ jobs:
         id: plan
         run: terraform plan -no-color -var-file="dev.tfvars"
         # continue-on-error kaldırıldı, hata varsa apply yapılmaz.
-
+ 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         run: terraform apply -auto-approve -var-file="dev.tfvars"
