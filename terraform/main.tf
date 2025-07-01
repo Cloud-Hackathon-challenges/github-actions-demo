@@ -28,3 +28,4 @@ resource "azurerm_container_registry" "rcteamdev" {
   admin_enabled       = var.acr_admin_enabled
 }
 
+ 
