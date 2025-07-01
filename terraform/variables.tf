@@ -48,3 +48,8 @@ variable "acr_admin_enabled" {
   type        = bool
   default     = true
 }
+
+variable "prefix" {
+  type = string
+
+}
