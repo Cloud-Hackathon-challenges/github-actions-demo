@@ -18,10 +18,10 @@ provider "azurerm" {
 resource "azurerm_resource_group" "rg-registry" {
   name     = var.resource_group_name
   location = var.resource_group_location
-} 
+}
 
 resource "azurerm_service_plan" "asp" {
-  name                = "asp-${var.resource_group_name}"
+  name                = "asp"
   location            = azurerm_resource_group.rg-registry.location
   resource_group_name = azurerm_resource_group.rg-registry.name
   sku_name            = "S1"
@@ -37,7 +37,7 @@ resource "azurerm_container_registry" "rcteamdev" {
 }
 
 resource "azurerm_linux_web_app" "as" {
-  name                = "${var.prefix}w"
+  name                = "as"
   resource_group_name = azurerm_resource_group.rg-registry
   location            = azurerm_service_plan.asp
   service_plan_id     = azurerm_service_plan.asp.id
@@ -47,7 +47,7 @@ resource "azurerm_linux_web_app" "as" {
 
 
 resource "azurerm_app_service_slot" "slot1" {
-  name                = "${var.prefix}slot1"
+  name                = "slot1"
   app_service_name    = azurerm_linux_web_app.as.name
   location            = azurerm_resource_group.rg-registry.location
   resource_group_name = azurerm_resource_group.rg-registry.name
