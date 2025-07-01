@@ -72,10 +72,12 @@ jobs:
 
       - name: Create dev.tfvars from GitHub Secrets
         run: |
-            echo client_id       = "${{ secrets.AZURE_CLIENT_ID }}"       > dev.tfvars
-            echo client_secret   = "${{ secrets.AZURE_CLIENT_SECRET }}"   >> dev.tfvars
-            echo tenant_id       = "${{ secrets.AZURE_TENANT_ID }}"       >> dev.tfvars
-            echo subscription_id = "${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> dev.tfvars
+            echo "client_id       = \"${{ secrets.AZURE_CLIENT_ID }}\""       > dev.tfvars
+            echo "client_secret   = \"${{ secrets.AZURE_CLIENT_SECRET }}\""   >> dev.tfvars
+            echo "tenant_id       = \"${{ secrets.AZURE_TENANT_ID }}\""       >> dev.tfvars
+            echo "subscription_id = \"${{ secrets.AZURE_SUBSCRIPTION_ID }}\"" >> dev.tfvars
+            cat dev.tfvars
+        
         
 
       - name: Terraform Init
