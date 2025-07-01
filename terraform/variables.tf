@@ -22,7 +22,7 @@ variable "tenant_id" {
 variable "resource_group_name" {
   description = "Name of the resource group"
   type        = string
-  default     = "team1-rg-manual2"
+  default     = "team1-rg-manual3"
 }
 
 variable "resource_group_location" {
@@ -34,7 +34,7 @@ variable "resource_group_location" {
 variable "acr_name" {
   description = "Name of the Azure Container Registry"
   type        = string
-  default     = "team1acrmanual2"
+  default     = "team1acrmanual3"
 }
 
 variable "acr_sku" {
