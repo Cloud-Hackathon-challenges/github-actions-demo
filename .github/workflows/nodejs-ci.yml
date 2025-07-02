@@ -102,7 +102,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: terraform-deploy-infra
     env:
-      ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_name }}.azurecr.io
+      ACR_LOGIN_SERVER: team1acrmanual6.azurecr.io
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
