@@ -18,6 +18,11 @@ provider "azurerm" {
 resource "azurerm_resource_group" "rg-registry" {
   name     = var.resource_group_name
   location = var.resource_group_location
+
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes = []
+  }
 }
 
 resource "azurerm_service_plan" "asp" {
