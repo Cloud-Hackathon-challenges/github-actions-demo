@@ -53,4 +53,4 @@ resource "azurerm_app_service_slot" "slot1" {
   resource_group_name = azurerm_resource_group.rg-registry.name
   app_service_plan_id = azurerm_service_plan.asp.id
 
-}
+} 
