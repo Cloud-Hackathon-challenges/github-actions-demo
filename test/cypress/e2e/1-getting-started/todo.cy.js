@@ -1,6 +1,6 @@
 describe('Simple Book Lending App Test', () => {
   beforeEach(() => {
-    cy.visit('http://localhost:80')
+    cy.visit('https://ass23847.azurewebsites.net')
   })
 
   it('Page loads and books are listed', () => {

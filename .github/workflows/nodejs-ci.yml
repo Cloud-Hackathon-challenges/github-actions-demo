@@ -85,7 +85,6 @@ jobs:
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -var-file="dev.tfvars"
-        # continue-on-error kaldırıldı, hata varsa apply yapılmaz.
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
@@ -134,7 +133,6 @@ jobs:
             echo "Verzeichnis ./application/db-seed existiert nicht. Überspringe den Build des db-seed Images."
           fi
 
-
   appservice-deploy:
     name: Deploy to Azure App Service
     runs-on: ubuntu-latest
@@ -166,10 +164,33 @@ jobs:
             --docker-registry-server-user ${{ secrets.ACR_USERNAME }} \
             --docker-registry-server-password ${{ secrets.ACR_PASSWORD }}
 
+  appservice-configure:
+    name: Configure App Service Container Registry Access and Restart
+    runs-on: ubuntu-latest
+    needs: appservice-deploy
+    steps:
+      - name: Azure Login
+        uses: azure/login@v1
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Configure App Service container registry access
+        run: |
+          az webapp config container set \
+            --name ${{ secrets.APP_NAME }} \
+            --resource-group ${{ secrets.AZURE_RG }} \
+            --docker-registry-server-url https://team1acrmanual6.azurecr.io \
+            --docker-registry-server-user ${{ secrets.ACR_USERNAME }} \
+            --docker-registry-server-password ${{ secrets.ACR_PASSWORD }}
+
+      - name: Restart Azure Web App
+        run: |
+          az webapp restart --name ${{ secrets.APP_NAME }} --resource-group ${{ secrets.AZURE_RG }}
+
   cypress-e2e:
     name: Run Cypress E2E Tests
     runs-on: ubuntu-latest
-    needs: appservice-deploy
+    needs: appservice-configure
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -188,5 +209,4 @@ jobs:
         working-directory: test
         env:
           CYPRESS_BASE_URL: https://${{ secrets.APP_NAME }}.azurewebsites.net     
-          TERM: xterm-256color                 
-                      
+          TERM: xterm-256color
