@@ -185,6 +185,7 @@ jobs:
 
       - name: Run Cypress tests
         run: npx cypress run
+        working-directory: test
         env:
           CYPRESS_BASE_URL: https://${{ secrets.APP_NAME }}.azurewebsites.net                       
                       
