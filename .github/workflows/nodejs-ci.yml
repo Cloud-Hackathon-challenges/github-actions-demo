@@ -187,5 +187,6 @@ jobs:
         run: npx cypress run
         working-directory: test
         env:
-          CYPRESS_BASE_URL: https://${{ secrets.APP_NAME }}.azurewebsites.net                       
+          CYPRESS_BASE_URL: https://${{ secrets.APP_NAME }}.azurewebsites.net     
+          TERM: xterm-256color                 
                       
