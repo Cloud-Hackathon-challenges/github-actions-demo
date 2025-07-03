@@ -31,7 +31,7 @@ resource "azurerm_service_plan" "asp" {
   resource_group_name = azurerm_resource_group.rg-registry.name
   sku_name            = "S1"
   os_type             = "Linux"
-}
+} 
 
 resource "azurerm_container_registry" "rcteamdev" {
   name                = var.acr_name
