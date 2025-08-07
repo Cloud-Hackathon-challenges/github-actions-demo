@@ -21,7 +21,7 @@ resource "azurerm_resource_group" "rg-registry" {
 
   lifecycle {
     prevent_destroy = true
-    ignore_changes = []
+    ignore_changes  = []
   }
 }
 
@@ -31,7 +31,7 @@ resource "azurerm_service_plan" "asp" {
   resource_group_name = azurerm_resource_group.rg-registry.name
   sku_name            = "S1"
   os_type             = "Linux"
-} 
+}
 
 resource "azurerm_container_registry" "rcteamdev" {
   name                = var.acr_name
@@ -50,12 +50,11 @@ resource "azurerm_linux_web_app" "as" {
   site_config {}
 }
 
+resource "azurerm_linux_web_app_slot" "slot1" {
+  name           = "slot1"
+  app_service_id = azurerm_linux_web_app.as.id
 
-resource "azurerm_app_service_slot" "slot1" {
-  name                = "slot1"
-  app_service_name    = azurerm_linux_web_app.as.name
-  location            = azurerm_resource_group.rg-registry.location
-  resource_group_name = azurerm_resource_group.rg-registry.name
-  app_service_plan_id = azurerm_service_plan.asp.id
-
-} 
+  site_config {
+    always_on = true
+  }
+}

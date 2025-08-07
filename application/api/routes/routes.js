@@ -1,7 +1,5 @@
 const express = require("express");
-
 const books = require("../controllers/bookController");
-
 const router = express.Router();
 
 router.use(function(req, res, next) {
@@ -13,10 +11,15 @@ router.use(function(req, res, next) {
   next();
 });
 
+// Existing routes
 router.route("/books").get(books.listAll);
 router.route("/books").post(books.create);
 router.route("/books/:bookId").get(books.findOne);
 router.route("/books/:bookId").put(books.update);
 router.route("/books/:bookId").delete(books.delete);
+
+// New routes for borrowing and returning books
+router.route("/books/:bookId/borrow").post(books.borrowBook);
+router.route("/books/:bookId/return").post(books.returnBook);
 
 module.exports = router;
