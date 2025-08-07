@@ -94,7 +94,7 @@ jobs:
         run: az logout
 
     outputs:
-      acr_name: ${{ steps.terraform_apply.outputs.acr_name || 'team1acrmanual' }}
+      acr_name: ${{ steps.terraform_apply.outputs.acr_name || 'team1acrmanual8' }}
 
   docker-build-push:
     name: Build and Push Docker Images
