@@ -42,7 +42,7 @@ resource "azurerm_container_registry" "rcteamdev" {
 }
 
 resource "azurerm_linux_web_app" "as" {
-  name                = "ass238479"
+  name                = "ass238471"
   resource_group_name = azurerm_resource_group.rg-registry.name
   location            = azurerm_resource_group.rg-registry.location
   service_plan_id     = azurerm_service_plan.asp.id
