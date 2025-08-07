@@ -46,14 +46,14 @@ resource "azurerm_linux_web_app" "as" {
   resource_group_name = azurerm_resource_group.rg-registry.name
   location            = azurerm_resource_group.rg-registry.location
   service_plan_id     = azurerm_service_plan.asp.id
-
   site_config {}
 }
-
-resource "azurerm_linux_web_app_slot" "slot1" {
-  name           = "slot1"
-  app_service_id = azurerm_linux_web_app.as.id
-
+resource "azurerm_app_service_slot" "slot1" {
+  name                = "slot1"
+  app_service_name    = azurerm_linux_web_app.as.name
+  location            = azurerm_resource_group.rg-registry.location
+  resource_group_name = azurerm_resource_group.rg-registry.name
+  app_service_plan_id = azurerm_service_plan.asp.id
   site_config {
     always_on = true
   }

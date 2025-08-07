@@ -45,7 +45,7 @@ variable "acr_sku" {
 
 variable "acr_admin_enabled" {
   description = "Enable admin user for the ACR"
-  type        = bool 
+  type        = bool
   default     = true
 }
 
