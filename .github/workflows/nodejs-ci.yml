@@ -75,6 +75,7 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.7
+          terraform_wrapper: false
 
       - name: Create dev.tfvars from GitHub Secrets
         run: |
@@ -100,13 +101,16 @@ jobs:
         id: tf_out
         shell: bash
         run: |
-          echo "rg_name=$(terraform output -raw resource_group_name)"       >> "$GITHUB_OUTPUT"
-          echo "asp_name=$(terraform output -raw app_service_plan)"         >> "$GITHUB_OUTPUT"
-          echo "app_name=$(terraform output -raw app_service_name)"         >> "$GITHUB_OUTPUT"
-          echo "acr_name=$(terraform output -raw acr_name)"                 >> "$GITHUB_OUTPUT"
-          echo "acr_login_server=$(terraform output -raw acr_login_server)" >> "$GITHUB_OUTPUT"
-          echo "acr_username=$(terraform output -raw acr_admin_username)"   >> "$GITHUB_OUTPUT"
-          echo "acr_password=$(terraform output -raw acr_admin_password)"   >> "$GITHUB_OUTPUT"
+          get() { terraform output -raw "$1" 2>/dev/null | head -n1 | tr -d '\r'; }
+      
+          echo "rg_name=$(get resource_group_name)"       >> "$GITHUB_OUTPUT"
+          echo "asp_name=$(get app_service_plan)"         >> "$GITHUB_OUTPUT"
+          echo "app_name=$(get app_service_name)"         >> "$GITHUB_OUTPUT"
+          echo "acr_name=$(get acr_name)"                 >> "$GITHUB_OUTPUT"
+          echo "acr_login_server=$(get acr_login_server)" >> "$GITHUB_OUTPUT"
+          echo "acr_username=$(get acr_admin_username)"   >> "$GITHUB_OUTPUT"
+          echo "acr_password=$(get acr_admin_password)"   >> "$GITHUB_OUTPUT"
+      
 
       - name: Azure Logout
         run: az logout
