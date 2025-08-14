@@ -1,5 +1,5 @@
 describe('template spec', () => {
   it('passes', () => {
-    cy.visit('http://localhost/admin')  // same here
+    cy.visit('https://ass238471.azurewebsites.net/admin')  // same here
   })
 })
