@@ -82,6 +82,12 @@ jobs:
       - name: Terraform Init
         run: terraform init
 
+      - name: Terraform State Remove Existing RG
+        run: terraform state rm azurerm_resource_group.rg-registry || true
+
+      - name: Terraform Import Existing RG
+        run: terraform import azurerm_resource_group.rg-registry /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/team1-rg-manual9
+
       - name: Terraform Plan
         id: plan
         run: terraform plan -no-color -var-file="dev.tfvars"
