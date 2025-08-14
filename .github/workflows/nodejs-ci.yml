@@ -79,27 +79,50 @@ jobs:
           subscription_id = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
           EOF
 
+          - name: Show Azure context (debug)
+          run: |
+            echo "== AZ Account =="
+            az account show -o table
+            echo "== Listing RGs (filter team1) =="
+            az group list --query "[].{name:name, location:location}" -o table | grep -i team1 || true
+  
       - name: Terraform Init
-        run: terraform init
-        
-      - name: Terraform Import Existing RG
+        run: terraform init -input=false -no-color
+  
+        # State'te varsa kaldır (state dosyası yoksa hata vermesin)
+      - name: Terraform State Remove Existing RG (best effort)
+        run: terraform state rm azurerm_resource_group.rg-registry || true
+  
+        # RG var mı kontrol et; varsa import, yoksa atla
+      - name: Conditional Import RG if exists
+        shell: bash
         run: |
-            terraform import \
-              -var "client_id=${{ secrets.AZURE_CLIENT_ID }}" \
-              -var "client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
-              -var "tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
-              -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
-              azurerm_resource_group.rg-registry \
-              /subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/team1-rg-manual9
-        
-
+            set -e
+            RG_NAME="team1-rg-manual9"
+            SUBS="${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+  
+            echo "Checking if resource group '$RG_NAME' exists in subscription $SUBS ..."
+            if az group show -n "$RG_NAME" --subscription "$SUBS" >/dev/null 2>&1; then
+              echo "RG exists. Importing into Terraform state..."
+              terraform import \
+                -var "client_id=${{ secrets.AZURE_CLIENT_ID }}" \
+                -var "client_secret=${{ secrets.AZURE_CLIENT_SECRET }}" \
+                -var "tenant_id=${{ secrets.AZURE_TENANT_ID }}" \
+                -var "subscription_id=${{ secrets.AZURE_SUBSCRIPTION_ID }}" \
+                azurerm_resource_group.rg-registry \
+                "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/${RG_NAME}"
+            else
+              echo "RG not found. Skipping import; Terraform will create it on apply."
+            fi
+  
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color -var-file="dev.tfvars"
-
+        run: terraform plan -no-color -input=false -var-file="dev.tfvars"
+  
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
-        run: terraform apply -auto-approve -var-file="dev.tfvars"
+        run: terraform apply -auto-approve -input=false -var-file="dev.tfvars"
+  
 
       - name: Azure Logout
         run: az logout
