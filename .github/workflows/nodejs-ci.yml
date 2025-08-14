@@ -157,7 +157,7 @@ jobs:
       RG_NAME:         ${{ needs.terraform-deploy-infra.outputs.rg_name }}
       ASP_NAME:        ${{ needs.terraform-deploy-infra.outputs.asp_name }}
       APP_NAME:        ${{ needs.terraform-deploy-infra.outputs.app_name }}
-      ACR_LOGIN_SERVER:${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
+      ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
       ACR_USERNAME:    ${{ needs.terraform-deploy-infra.outputs.acr_username }}
       ACR_PASSWORD:    ${{ needs.terraform-deploy-infra.outputs.acr_password }}
     steps:
