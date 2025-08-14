@@ -58,3 +58,4 @@ resource "azurerm_app_service_slot" "slot1" {
     always_on = true
   }
 }
+ 
