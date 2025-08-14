@@ -89,3 +89,8 @@ terraform/dev.tfvarsterraform/*.tfstate
 terraform/*.tfstate
 terraform.tfstate
 *.tfstate*
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+*.env
