@@ -88,3 +88,4 @@ terraform.rc
 terraform/dev.tfvarsterraform/*.tfstate
 terraform/*.tfstate
 terraform.tfstate
+*.tfstate*
