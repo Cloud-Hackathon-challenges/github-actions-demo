@@ -75,7 +75,7 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.7
-          terraform_wrapper: false
+          terraform_wrapper: false   # important: avoid ::debug:: noise
 
       - name: Create dev.tfvars from GitHub Secrets
         run: |
@@ -102,7 +102,6 @@ jobs:
         shell: bash
         run: |
           get() { terraform output -raw "$1" 2>/dev/null | head -n1 | tr -d '\r'; }
-      
           echo "rg_name=$(get resource_group_name)"       >> "$GITHUB_OUTPUT"
           echo "asp_name=$(get app_service_plan)"         >> "$GITHUB_OUTPUT"
           echo "app_name=$(get app_service_name)"         >> "$GITHUB_OUTPUT"
@@ -110,7 +109,6 @@ jobs:
           echo "acr_login_server=$(get acr_login_server)" >> "$GITHUB_OUTPUT"
           echo "acr_username=$(get acr_admin_username)"   >> "$GITHUB_OUTPUT"
           echo "acr_password=$(get acr_admin_password)"   >> "$GITHUB_OUTPUT"
-      
 
       - name: Azure Logout
         run: az logout
@@ -120,35 +118,36 @@ jobs:
     runs-on: ubuntu-latest
     needs: terraform-deploy-infra
     env:
+      ACR_NAME:         ${{ needs.terraform-deploy-infra.outputs.acr_name }}
       ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
-      ACR_USERNAME:     ${{ needs.terraform-deploy-infra.outputs.acr_username }}
-      ACR_PASSWORD:     ${{ needs.terraform-deploy-infra.outputs.acr_password }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Login to Azure Container Registry
-        uses: azure/docker-login@v1
+      - name: Azure Login
+        uses: azure/login@v1
         with:
-          login-server: ${{ env.ACR_LOGIN_SERVER }}
-          username:     ${{ env.ACR_USERNAME }}
-          password:     ${{ env.ACR_PASSWORD }}
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      # Parolasız login: admin user gerekmez
+      - name: ACR Login (no admin user)
+        run: az acr login -n "$ACR_NAME"
 
       - name: Build and Push frontend image
         run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/frontend:latest ./application/frontend
-          docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:latest
+          docker build -t $ACR_LOGIN_SERVER/frontend:latest ./application/frontend
+          docker push $ACR_LOGIN_SERVER/frontend:latest
 
       - name: Build and Push api image
         run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/api:latest ./application/api
-          docker push ${{ env.ACR_LOGIN_SERVER }}/api:latest
+          docker build -t $ACR_LOGIN_SERVER/api:latest ./application/api
+          docker push $ACR_LOGIN_SERVER/api:latest
 
       - name: Build and Push db-seed image (if exists)
         run: |
           if [ -d "./application/db-seed" ]; then
-            docker build -t ${{ env.ACR_LOGIN_SERVER }}/db-seed:latest ./application/db-seed
-            docker push ${{ env.ACR_LOGIN_SERVER }}/db-seed:latest
+            docker build -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
+            docker push $ACR_LOGIN_SERVER/db-seed:latest
           else
             echo "db-seed directory not found, skipping."
           fi
@@ -158,12 +157,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [ docker-build-push, terraform-deploy-infra ]
     env:
-      RG_NAME:         ${{ needs.terraform-deploy-infra.outputs.rg_name }}
-      ASP_NAME:        ${{ needs.terraform-deploy-infra.outputs.asp_name }}
-      APP_NAME:        ${{ needs.terraform-deploy-infra.outputs.app_name }}
+      RG_NAME:          ${{ needs.terraform-deploy-infra.outputs.rg_name }}
+      ASP_NAME:         ${{ needs.terraform-deploy-infra.outputs.asp_name }}
+      APP_NAME:         ${{ needs.terraform-deploy-infra.outputs.app_name }}
       ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
-      ACR_USERNAME:    ${{ needs.terraform-deploy-infra.outputs.acr_username }}
-      ACR_PASSWORD:    ${{ needs.terraform-deploy-infra.outputs.acr_password }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -187,9 +184,7 @@ jobs:
           az webapp config container set \
             --name "$APP_NAME" \
             --resource-group "$RG_NAME" \
-            --docker-registry-server-url "https://${ACR_LOGIN_SERVER}" \
-            --docker-registry-server-user "$ACR_USERNAME" \
-            --docker-registry-server-password "$ACR_PASSWORD"
+            --docker-registry-server-url "https://${ACR_LOGIN_SERVER}"
 
   appservice-configure:
     name: Restart Web App
@@ -205,8 +200,7 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
       - name: Restart Azure Web App
-        run: |
-          az webapp restart --name "$APP_NAME" --resource-group "$RG_NAME"
+        run: az webapp restart --name "$APP_NAME" --resource-group "$RG_NAME"
 
   cypress-e2e:
     name: Run Cypress E2E Tests
