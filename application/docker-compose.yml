@@ -1,23 +1,24 @@
 version: "3.8"
+
 services:
-  mongodb: #this is the local db in docker
+  mongodb:
     image: mongo:5
     restart: always
     ports:
-      - 27017:27017
+      - "27017:27017"
 
-  mongo-seed: #this is used to populate the DB, see dockerfile for import command
+  mongo-seed:
     build: ./db-seed
-    # image: yourregistry.azurecr.io/bib/mongo-seed
     depends_on:
       - mongodb
 
   api:
     build:
       context: ./api
-    # image: yourregistry.azurecr.io/bib/api
+    ports:
+      - "4000:4000"                    # dış port erişimi
     environment:
-      PORT: 4000
+      PORT: 4000                      # node app'in dinlediği port
       MONGO_URI: mongodb://mongodb:27017/dobook
     depends_on:
       - mongodb
@@ -25,11 +26,10 @@ services:
   frontend:
     build:
       context: ./frontend
-    # image: yourregistry.azurecr.io/bib/frontend
+    ports:
+      - "80:80"
     environment:
       API_HOST: api
       API_PORT: 4000
-    links:
+    depends_on:
       - api
-    ports:
-      - 80:80

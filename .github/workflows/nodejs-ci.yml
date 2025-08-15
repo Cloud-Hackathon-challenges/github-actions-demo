@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         node-version: [20]
-        project: [frontend, api]
+        project: [frontend, api]cd ..
     defaults:
       run:
         working-directory: application/${{ matrix.project }}
