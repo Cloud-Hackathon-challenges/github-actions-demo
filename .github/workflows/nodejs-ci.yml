@@ -94,14 +94,14 @@ jobs:
         run: az logout
 
     outputs:
-      acr_name: ${{ steps.terraform_apply.outputs.acr_name || 'team1acrmanual' }}
+      acr_name: ${{ steps.terraform_apply.outputs.acr_name || 'team1acrmanual9' }}
 
   docker-build-push:
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
     needs: terraform-deploy-infra
     env:
-      ACR_LOGIN_SERVER: team1acrmanual6.azurecr.io
+      ACR_LOGIN_SERVER: team1acrmanual9.azurecr.io
 
     steps:
       - name: Checkout repository
@@ -179,7 +179,7 @@ jobs:
           az webapp config container set \
             --name ${{ secrets.APP_NAME }} \
             --resource-group ${{ secrets.AZURE_RG }} \
-            --docker-registry-server-url https://team1acrmanual6.azurecr.io \
+            --docker-registry-server-url https://team1acrmanual9.azurecr.io \
             --docker-registry-server-user ${{ secrets.ACR_USERNAME }} \
             --docker-registry-server-password ${{ secrets.ACR_PASSWORD }}
 
