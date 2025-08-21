@@ -1,33 +1,25 @@
-version: "3"
-
 services:
   mongodb:
     image: team1acrmanual9.azurecr.io/mongo:5
+    container_name: mongodb
+    restart: always
 
   mongo-seed:
-    build:
-      context: ./db-seed
-      args:
-        HOST: mongodb
     image: team1acrmanual9.azurecr.io/db-seed:webapp
     depends_on:
       - mongodb
 
   api:
-    build:
-      context: ./api
-    image: team1acrmanual9.azurecr.io/api
+    image: team1acrmanual9.azurecr.io/api:latest
     ports:
       - "4000:4000"
     environment:
       PORT: 4000
-      MONGO_URI: mongodb://mongodb:27017/dobook
+      MONGO_URI: mongodb://localhost:27017/dobook
     depends_on:
       - mongodb
 
   frontend:
-    build:
-      context: ./frontend
     image: team1acrmanual9.azurecr.io/frontend:latest
     ports:
       - "80:80"
