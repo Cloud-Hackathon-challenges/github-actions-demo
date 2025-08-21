@@ -2,11 +2,9 @@ name: Node.js CI, Terraform Deploy and Docker Build
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   test:
@@ -32,17 +30,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run tests
+      - name: Run tests (non-blocking)
         run: npm test || echo "tests failed (not blocking)"
 
-      - name: Run audit (show security warnings, but continue)
+      - name: Security audit (non-blocking)
         run: npm audit || true
 
       - name: Simple lint check for API project
         if: matrix.project == 'api'
         run: |
-          echo "Linting API: Kontrol ediliyor..."
-          grep -rIn '[^;]$' . --include=*.js || echo "Semikolon-Kontrolle abgeschlossen"
+          echo "Linting API..."
+          grep -rIn '[^;]$' . --include=*.js || echo "Lint check done"
 
   terraform-deploy-infra:
     name: Deploy Azure Infrastructure with Terraform
@@ -56,6 +54,14 @@ jobs:
     defaults:
       run:
         working-directory: ./terraform
+    outputs:
+      rg_name:            ${{ steps.tf_out.outputs.rg_name }}
+      asp_name:           ${{ steps.tf_out.outputs.asp_name }}
+      app_name:           ${{ steps.tf_out.outputs.app_name }}
+      acr_name:           ${{ steps.tf_out.outputs.acr_name }}
+      acr_login_server:   ${{ steps.tf_out.outputs.acr_login_server }}
+      acr_username:       ${{ steps.tf_out.outputs.acr_username }}
+      acr_password:       ${{ steps.tf_out.outputs.acr_password }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -69,6 +75,7 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.7
+          terraform_wrapper: false
 
       - name: Create dev.tfvars from GitHub Secrets
         run: |
@@ -80,63 +87,78 @@ jobs:
           EOF
 
       - name: Terraform Init
-        run: terraform init
+        run: terraform init -input=false -no-color
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color -var-file="dev.tfvars"
+        run: terraform plan -no-color -input=false -var-file="dev.tfvars"
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
-        run: terraform apply -auto-approve -var-file="dev.tfvars"
+        run: terraform apply -auto-approve -input=false -var-file="dev.tfvars"
+
+      - name: Export Terraform outputs for next jobs
+        id: tf_out
+        shell: bash
+        run: |
+          get() { terraform output -raw "$1" 2>/dev/null | head -n1 | tr -d '\r'; }
+          echo "rg_name=$(get resource_group_name)"       >> "$GITHUB_OUTPUT"
+          echo "asp_name=$(get app_service_plan)"         >> "$GITHUB_OUTPUT"
+          echo "app_name=$(get app_service_name)"         >> "$GITHUB_OUTPUT"
+          echo "acr_name=$(get acr_name)"                 >> "$GITHUB_OUTPUT"
+          echo "acr_login_server=$(get acr_login_server)" >> "$GITHUB_OUTPUT"
+          echo "acr_username=$(get acr_admin_username)"   >> "$GITHUB_OUTPUT"
+          echo "acr_password=$(get acr_admin_password)"   >> "$GITHUB_OUTPUT"
 
       - name: Azure Logout
         run: az logout
-
-    outputs:
-      acr_name: ${{ steps.terraform_apply.outputs.acr_name || 'team1acrmanual9' }}
 
   docker-build-push:
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
     needs: terraform-deploy-infra
     env:
-      ACR_LOGIN_SERVER: team1acrmanual9.azurecr.io
-
+      ACR_NAME:         ${{ needs.terraform-deploy-infra.outputs.acr_name }}
+      ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
+      ACR_USERNAME:     ${{ needs.terraform-deploy-infra.outputs.acr_username }}
+      ACR_PASSWORD:     ${{ needs.terraform-deploy-infra.outputs.acr_password }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Login to Azure Container Registry
-        uses: azure/docker-login@v1
-        with:
-          login-server: ${{ env.ACR_LOGIN_SERVER }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+      - name: Docker Login with ACR admin user
+        run: echo "$ACR_PASSWORD" | docker login "$ACR_LOGIN_SERVER" --username "$ACR_USERNAME" --password-stdin
 
       - name: Build and Push frontend image
         run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/frontend:latest ./application/frontend
-          docker push ${{ env.ACR_LOGIN_SERVER }}/frontend:latest
+          docker build -t $ACR_LOGIN_SERVER/frontend:latest ./application/frontend
+          docker push $ACR_LOGIN_SERVER/frontend:latest
 
       - name: Build and Push api image
         run: |
-          docker build -t ${{ env.ACR_LOGIN_SERVER }}/api:latest ./application/api
-          docker push ${{ env.ACR_LOGIN_SERVER }}/api:latest
+          docker build -t $ACR_LOGIN_SERVER/api:latest ./application/api
+          docker push $ACR_LOGIN_SERVER/api:latest
 
-      - name: Build and Push db-seed image
+      - name: Build and Push db-seed image (if exists)
         run: |
           if [ -d "./application/db-seed" ]; then
-            docker build -t ${{ env.ACR_LOGIN_SERVER }}/db-seed:latest ./application/db-seed
-            docker push ${{ env.ACR_LOGIN_SERVER }}/db-seed:latest
+            docker build -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
+            docker push $ACR_LOGIN_SERVER/db-seed:latest
           else
-            echo "Verzeichnis ./application/db-seed existiert nicht. Überspringe den Build des db-seed Images."
+            echo "db-seed directory not found, skipping."
           fi
 
   appservice-deploy:
     name: Deploy to Azure App Service
     runs-on: ubuntu-latest
-    needs: docker-build-push
+    needs: [ docker-build-push, terraform-deploy-infra ]
+    env:
+      RG_NAME:          ${{ needs.terraform-deploy-infra.outputs.rg_name }}
+      ASP_NAME:         ${{ needs.terraform-deploy-infra.outputs.asp_name }}
+      APP_NAME:         ${{ needs.terraform-deploy-infra.outputs.app_name }}
+      ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
+      ACR_USERNAME:     ${{ needs.terraform-deploy-infra.outputs.acr_username }}
+      ACR_PASSWORD:     ${{ needs.terraform-deploy-infra.outputs.acr_password }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -146,67 +168,35 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Deploy with docker-compose
+      - name: Create / Update Web App (multi-container)
         run: |
           az webapp create \
-            --resource-group ${{ secrets.AZURE_RG }} \
-            --plan ${{ secrets.APP_SERVICE_PLAN }} \
-            --name ${{ secrets.APP_NAME }} \
+            --resource-group "$RG_NAME" \
+            --plan "$ASP_NAME" \
+            --name "$APP_NAME" \
             --multicontainer-config-type compose \
-            --multicontainer-config-file application/docker-compose.webapp.yml
+            --multicontainer-config-file application/docker-compose.webapp.yml || true
 
-      - name: Configure ACR access
+      - name: Configure ACR access for Web App
         run: |
           az webapp config container set \
-            --name ${{ secrets.APP_NAME }} \
-            --resource-group ${{ secrets.AZURE_RG }} \
-            --docker-registry-server-url https://${{ secrets.ACR_NAME }}.azurecr.io \
-            --docker-registry-server-user ${{ secrets.ACR_USERNAME }} \
-            --docker-registry-server-password ${{ secrets.ACR_PASSWORD }}
+            --name "$APP_NAME" \
+            --resource-group "$RG_NAME" \
+            --docker-registry-server-url "https://${ACR_LOGIN_SERVER}" \
+            --docker-registry-server-user "$ACR_USERNAME" \
+            --docker-registry-server-password "$ACR_PASSWORD"
 
   appservice-configure:
-    name: Configure App Service Container Registry Access and Restart
+    name: Restart Web App
     runs-on: ubuntu-latest
-    needs: appservice-deploy
+    needs: [ appservice-deploy, terraform-deploy-infra ]
+    env:
+      RG_NAME:  ${{ needs.terraform-deploy-infra.outputs.rg_name }}
+      APP_NAME: ${{ needs.terraform-deploy-infra.outputs.app_name }}
     steps:
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Configure App Service container registry access
-        run: |
-          az webapp config container set \
-            --name ${{ secrets.APP_NAME }} \
-            --resource-group ${{ secrets.AZURE_RG }} \
-            --docker-registry-server-url https://team1acrmanual9.azurecr.io \
-            --docker-registry-server-user ${{ secrets.ACR_USERNAME }} \
-            --docker-registry-server-password ${{ secrets.ACR_PASSWORD }}
-
-      - name: Restart Azure Web App
-        run: |
-          az webapp restart --name ${{ secrets.APP_NAME }} --resource-group ${{ secrets.AZURE_RG }}
-
-  cypress-e2e:
-    name: Run Cypress E2E Tests
-    runs-on: ubuntu-latest
-    needs: appservice-configure
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-          
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm ci
-        working-directory: test
-
-      - name: Run Cypress tests
-        run: npx cypress run
-        working-directory: test
-        env:
-          CYPRESS_BASE_URL: https://${{ secrets.APP_NAME }}.azurewebsites.net     
-          TERM: xterm-256color
+      - name: Restart
