@@ -142,11 +142,11 @@ jobs:
           docker build -t $ACR_LOGIN_SERVER/api:latest ./application/api
           docker push $ACR_LOGIN_SERVER/api:latest
 
-      - name: Build and Push db-seed image (if exists)
+      - name: Build and Push db-seed image (webapp tag)
         run: |
           if [ -d "./application/db-seed" ]; then
-            docker build -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
-            docker push $ACR_LOGIN_SERVER/db-seed:latest
+            docker build -t $ACR_LOGIN_SERVER/db-seed:webapp ./application/db-seed
+            docker push $ACR_LOGIN_SERVER/db-seed:webapp
           else
             echo "db-seed directory not found, skipping."
           fi
@@ -160,6 +160,7 @@ jobs:
       ASP_NAME:         ${{ needs.terraform-deploy-infra.outputs.asp_name }}
       APP_NAME:         ${{ needs.terraform-deploy-infra.outputs.app_name }}
       ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
+      ACR_NAME:         ${{ needs.terraform-deploy-infra.outputs.acr_name }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -178,12 +179,23 @@ jobs:
             --multicontainer-config-type compose \
             --multicontainer-config-file application/docker-compose.webapp.yml || true
 
-      - name: Configure ACR access for Web App
+      - name: Configure ACR credentials on Web App
         run: |
+          USER="${{ needs.terraform-deploy-infra.outputs.acr_username }}"
+          PASS="${{ needs.terraform-deploy-infra.outputs.acr_password }}"
           az webapp config container set \
             --name "$APP_NAME" \
             --resource-group "$RG_NAME" \
-            --docker-registry-server-url "https://${ACR_LOGIN_SERVER}"
+            --docker-registry-server-url "https://${ACR_LOGIN_SERVER}" \
+            --docker-registry-server-user "$USER" \
+            --docker-registry-server-password "$PASS"
+
+      - name: Set App Settings (WEBSITES_PORT=80)
+        run: |
+          az webapp config appsettings set \
+            --resource-group "$RG_NAME" \
+            --name "$APP_NAME" \
+            --settings WEBSITES_PORT=80 WEBSITES_CONTAINER_START_TIME_LIMIT=1800
 
   appservice-configure:
     name: Restart Web App
@@ -204,9 +216,10 @@ jobs:
   cypress-e2e:
     name: Run Cypress E2E Tests
     runs-on: ubuntu-latest
-    needs: appservice-configure
+    needs: [ appservice-configure, terraform-deploy-infra ]
     env:
       APP_NAME: ${{ needs.terraform-deploy-infra.outputs.app_name }}
+      CYPRESS_BASE_URL: "https://${{ needs.terraform-deploy-infra.outputs.app_name }}.azurewebsites.net"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -220,9 +233,51 @@ jobs:
         run: npm ci
         working-directory: test
 
+      - name: Show resolved app URL
+        run: echo "CYPRESS_BASE_URL=$CYPRESS_BASE_URL"
+
+      - name: Wait until app is up (max ~5 min)
+        run: |
+          for i in {1..60}; do
+            if curl -fsS --max-time 5 "$CYPRESS_BASE_URL" >/dev/null; then
+              echo "App is up"; exit 0
+            fi
+            sleep 5
+          done
+          echo "App did not come up in time"; exit 1
+
       - name: Run Cypress tests
         run: npx cypress run
         working-directory: test
         env:
-          CYPRESS_BASE_URL: https://${{ env.APP_NAME }}.azurewebsites.net
           TERM: xterm-256color
+
+
+     
+  
+
+  # cypress-e2e:
+  #   name: Run Cypress E2E Tests
+  #   runs-on: ubuntu-latest
+  #   needs: appservice-configure
+  #   env:
+  #     APP_NAME: ${{ needs.terraform-deploy-infra.outputs.app_name }}
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+
+  #     - name: Setup Node.js
+  #       uses: actions/setup-node@v3
+  #       with:
+  #         node-version: 20
+
+  #     - name: Install dependencies
+  #       run: npm ci
+  #       working-directory: test
+
+  #     - name: Run Cypress tests
+  #       run: npx cypress run
+  #       working-directory: test
+  #       env:
+  #         CYPRESS_BASE_URL: https://${{ env.APP_NAME }}.azurewebsites.net
+  #         TERM: xterm-256color
