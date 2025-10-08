@@ -48,8 +48,8 @@
     service_plan_id     = azurerm_service_plan.asp.id
     site_config {}
   }
-  resource "azurerm_app_service_slot" "slot1" {
-    name                = "slot1"
+  resource "azurerm_app_service_slot" "slot2" {
+    name                = "slot2"
     app_service_name    = azurerm_linux_web_app.as.name
     location            = azurerm_resource_group.rg-registry.location
     resource_group_name = azurerm_resource_group.rg-registry.name
@@ -58,4 +58,7 @@
       always_on = true
     }
   }
+  
+
+
   
