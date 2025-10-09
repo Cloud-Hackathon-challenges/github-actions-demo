@@ -12,7 +12,7 @@ app.use(bodyParser.urlencoded({ extended: true }));
 
 app.use('/api', routes)
 
-// This if is used to connect to the database only if we are not running within test cases in Mocha
+// This if is used to connect to the database only if we are not running within test cases in Mochan
 if (!module.parent) {
 
     mongoose.connect(config.mongo.uri, {
