@@ -1,0 +1,11 @@
+{
+    "name": "db-seed",
+    "version": "1.0.0",
+    "scripts": {
+      "start": "node seed.js"
+    },
+    "dependencies": {
+      "mongodb": "^5.9.0"
+    }
+  }
+  

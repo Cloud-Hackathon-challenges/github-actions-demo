@@ -1,35 +1,42 @@
+
 version: "3.8"
 
 services:
   mongodb:
-    image: mongo:5
+    image: mongo:7           # multi-arch (ARM64 uyumlu). Gerekirse 6 da olur.
     restart: always
     ports:
       - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "mongodb://localhost:27017/dobook", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
 
   mongo-seed:
-    build: ./db-seed
+    build: ./db-seed         # db-seed/Dockerfile içinde mongoimport + wait-for-it var
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
+    restart: "no"            # tek seferlik çalışsın
 
   api:
     build:
       context: ./api
-    ports:
-      - "4000:4000"                    # dış port erişimi
     environment:
-      PORT: 4000                      # node app'in dinlediği port
+      PORT: 4000
       MONGO_URI: mongodb://mongodb:27017/dobook
+    ports:
+      - "4000:4000"
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
 
   frontend:
     build:
       context: ./frontend
     ports:
-      - "80:80"
-    environment:
-      API_HOST: api
-      API_PORT: 4000
+      - "8080:80"            # localhost:8080
     depends_on:
       - api
+    # Nginx ile /api/ -> http://api:4000/ proxy yapıyorsun; extra env gerekmez
