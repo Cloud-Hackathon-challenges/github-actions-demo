@@ -1,42 +1,53 @@
-
 version: "3.8"
 
 services:
   mongodb:
-    image: mongo:7           # multi-arch (ARM64 uyumlu). Gerekirse 6 da olur.
+    image: mongo:6-jammy
     restart: always
     ports:
       - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "mongodb://localhost:27017/dobook", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.runCommand({ ping: 1 }).ok\" || exit 1"]
       interval: 5s
-      timeout: 3s
-      retries: 12
-
-  mongo-seed:
-    build: ./db-seed         # db-seed/Dockerfile içinde mongoimport + wait-for-it var
-    depends_on:
-      mongodb:
-        condition: service_healthy
-    restart: "no"            # tek seferlik çalışsın
+      timeout: 5s
+      retries: 20
 
   api:
     build:
       context: ./api
     environment:
       PORT: 4000
-      MONGO_URI: mongodb://mongodb:27017/dobook
-    ports:
-      - "4000:4000"
+      MONGO_URI: mongodb://mongodb:27017/dobook   # DB adı 'dobook'
     depends_on:
       mongodb:
         condition: service_healthy
+    ports:
+      - "4000:4000"
+    command: ["node", "server.js"]   # entrypoint yok, doğrudan node
+
+  mongo-seed:
+    build:
+      context: ./db-seed
+      args:
+        HOST: mongodb
+        PORT: 27017
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: "no"
 
   frontend:
     build:
       context: ./frontend
-    ports:
-      - "8080:80"            # localhost:8080
+    environment:
+      API_HOST: api
+      API_PORT: 4000
     depends_on:
       - api
-    # Nginx ile /api/ -> http://api:4000/ proxy yapıyorsun; extra env gerekmez
+    ports:
+      - "8080:80"   # rootless podman için host portu
+
+volumes:
+  mongo-data:
