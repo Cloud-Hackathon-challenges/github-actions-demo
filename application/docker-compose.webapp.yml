@@ -1,34 +1,36 @@
-version: "3.8"
-
+version: "3"
 services:
-  mongodb:
-    image: team1acrmanual9.azurecr.io/mongo:5
-    restart: always
+  mongodb: 
+    image: yourregistry.azurecr.io/bib/mongo:5
 
-  # Seed şu an sende AVX/mongoimport yüzünden patlıyordu; şimdilik kapalı.
-  # İstersen aşağıda "5) Elle seed" ile veriyi ekleyeceğiz.
-  # mongo-seed:
-  #   image: team1acrmanual9.azurecr.io/db-seed:webapp
-  #   depends_on:
-  #     - mongodb
-  #   restart: "no"
-
-  api:
-    image: team1acrmanual9.azurecr.io/api:latest
-    ports:
-      - "4000:4000"
-    environment:
-      PORT: 4000
-      MONGO_URI: mongodb://mongodb:27017/dobook
+  mongo-seed: #this is used to populate the DB, see dockerfile for import command
+    build: 
+      context: ./db-seed
+      args:
+        HOST: mongodb
+    image: yourregistry.azurecr.io/bib/mongo-seed:webapp
     depends_on:
       - mongodb
+          
+  api:
+    build:
+      context: ./api
+    image: yourregistry.azurecr.io/bib/api
+    depends_on:
+      - mongodb
+    environment:
+      PORT: 4000
+      # MONGO_URI: ${MONGO_URI}
+      MONGO_URI: mongodb://mongodb:27017/dobook
 
   frontend:
-    image: team1acrmanual9.azurecr.io/frontend:latest
-    ports:
-      - "8080:80"        # rootless için 8080
-    environment:
-      API_HOST: api
-      API_PORT: 4000     # <- DOĞRU HİZA (önceden yanlış düşüktü)
+    build:
+      context: ./frontend
+    image: yourregistry.azurecr.io/bib/frontend
     depends_on:
       - api
+    environment:
+      API_HOST: api
+      API_PORT: 4000
+    ports:
+      - "80:80"
