@@ -1,6 +1,6 @@
 module.exports = {
     e2e: {
-      baseUrl: process.env.CYPRESS_BASE_URL || 'http://localhost:8080',
+      baseUrl: process.env.CYPRESS_BASE_URL || 'https://ass238471.azurewebsites.net',
     },
   };
   

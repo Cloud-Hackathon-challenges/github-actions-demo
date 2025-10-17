@@ -16,7 +16,7 @@ const { defineConfig } = require('cypress');
 module.exports = defineConfig({
   e2e: {
     // Lokal default + istersek ENV ile override
-    baseUrl: process.env.CYPRESS_BASE_URL || 'http://localhost:8080',
+    baseUrl: process.env.CYPRESS_BASE_URL || 'https://ass238471.azurewebsites.net',
     // İstersen:
     // testIsolation: false,
     setupNodeEvents(on, config) {

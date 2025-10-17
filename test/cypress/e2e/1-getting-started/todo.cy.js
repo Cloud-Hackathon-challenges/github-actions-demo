@@ -1,7 +1,7 @@
 describe('status-toggle', () => {
   it('toggles the status text in the same row when clicking BORROW/RETURN', () => {
     // 1️⃣ Open root (auto-redirects to /books)
-    cy.visit('http://localhost:8080/');
+    cy.visit('https://ass238471.azurewebsites.net/');
     cy.location('pathname', { timeout: 10000 }).should('match', /\/books$/);
 
     // 2️⃣ Grab the first visible BORROW/RETURN button
