@@ -183,8 +183,9 @@ jobs:
           az webapp config container set \
             --name "$APP_NAME" \
             --resource-group "$RG_NAME" \
-            --docker-registry-server-url "https://${ACR_LOGIN_SERVER}"
-
+            --docker-registry-server-url "https://${ACR_LOGIN_SERVER}" \
+            --docker-registry-server-user "${{ needs.terraform-deploy-infra.outputs.acr_username }}" \
+            --docker-registry-server-password "${{ needs.terraform-deploy-infra.outputs.acr_password }}"
   appservice-configure:
     name: Restart Web App
     runs-on: ubuntu-latest
