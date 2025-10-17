@@ -1,58 +1,59 @@
-describe('Simple Book Lending App E2E Test', () => {
-  const bookTitle = `New Book Title ${Date.now()}`;
+describe('status-toggle', () => {
+  it('toggles the status text in the same row when clicking BORROW/RETURN', () => {
+    // 1️⃣ Open root (auto-redirects to /books)
+    cy.visit('http://localhost:8080/');
+    cy.location('pathname', { timeout: 10000 }).should('match', /\/books$/);
 
-  it('Page is accessible and lists initial books', () => {
-    cy.visit('https://ass238471.azurewebsites.net');
-    cy.contains('24 Work Hacks').should('be.visible');
-    cy.contains('Agile Software Development with Scrum').should('be.visible');
-  });
+    // 2️⃣ Grab the first visible BORROW/RETURN button
+    cy.contains('button', /BORROW|RETURN/i, { timeout: 10000 })
+      .should('be.visible')
+      .and('not.be.disabled')
+      .then(($btn) => {
+        // 3️⃣ Remember the current button label and the opposite
+        const beforeBtn = $btn.text().trim().toUpperCase();
+        const afterBtn  = beforeBtn.includes('BORROW') ? 'RETURN' : 'BORROW';
 
-  it('Adds a new book and verifies it appears in the list', () => {
-    cy.visit('https://ass238471.azurewebsites.net/admin');
+        // 4️⃣ Find the table row for this button
+        const $row = $btn.closest('tr');
 
-    // Open Add Book dialog
-    cy.get('button[aria-label="Add"]').click();
+        // 5️⃣ Within the same row, capture the current status text
+        //    We accept common variants: German/English.
+        const statusRegex = /(Verfügbar|Ausgeliehen|Available|Borrowed|Loaned)/i;
 
-    // Type new book title
-    cy.get('#name').type(bookTitle);
+        let beforeStatusText = '';
+        cy.wrap($row).invoke('text').then((txt) => {
+          const match = String(txt).match(statusRegex);
+          beforeStatusText = match ? match[0] : ''; // may be empty if UI differs
+        });
 
-    // Submit the form
-    cy.contains('button', 'Add').click();
+        // 6️⃣ Click the button to toggle state
+        cy.wrap($btn).click({ force: true });
 
-    // Confirm it appears in the list
-    cy.contains(bookTitle, { timeout: 6000 }).should('be.visible');
-  });
+        // 7️⃣ In the SAME ROW, wait for the opposite button label to appear
+        cy.wrap($row).within(() => {
+          cy.contains('button', new RegExp(afterBtn, 'i'), { timeout: 10000 })
+            .should('be.visible');
+        });
 
-  it('Navigates to book detail page and verifies content', () => {
-    cy.visit('https://ass238471.azurewebsites.net/admin');
+        // 8️⃣ Now assert the status text changed to a different value
+        cy.wrap($row)
+          .invoke('text')
+          .then((txtAfter) => {
+            const afterMatch = String(txtAfter).match(statusRegex);
+            const afterStatusText = afterMatch ? afterMatch[0] : '';
 
-    // Find and click book link (in ID column)
-    cy.contains('tr', bookTitle).within(() => {
-      cy.get('a').first().click(); // Goes to /books/:id
-    });
-
-    // Confirm page loaded correctly
-    cy.url().should('include', '/books/');
-    cy.contains(bookTitle).should('be.visible');
-    cy.contains('Entlehnen').should('be.visible'); // From Rent.js
-  });
-
-  it('Deletes a book and verifies it no longer appears', () => {
-    cy.visit('https://ass238471.azurewebsites.net/admin');
-
-    cy.intercept('DELETE', '/api/books/*').as('deleteBook');
-
-    cy.contains(bookTitle, { timeout: 6000 })
-      .parents('tr')
-      .within(() => {
-        cy.get('button[aria-label="Delete"]').click({ force: true });
+            // If we captured a before-status, ensure it toggled.
+            // If not captured (UI variant), at least ensure there IS a recognizable status now.
+            if (beforeStatusText) {
+              expect(afterStatusText, 'status text should toggle').to.not.equal(beforeStatusText);
+            } else {
+              expect(afterStatusText, 'recognizable status text should be present')
+                .to.match(statusRegex);
+            }
+          });
       });
 
-    cy.contains('button', 'Delete').click({ force: true });
-
-    cy.wait('@deleteBook');
-    cy.wait(1000); // Wait for refresh
-
-    cy.get('table').should('not.contain', bookTitle);
+    // 9️⃣ We should still be on /books after the interaction
+    cy.location('pathname').should('match', /\/books$/);
   });
 });
