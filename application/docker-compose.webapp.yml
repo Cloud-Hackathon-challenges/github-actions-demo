@@ -41,9 +41,6 @@
 #     ports:
 #       - "80:80"
 
-
-
-
 version: "3.8"
 
 services:
@@ -53,13 +50,8 @@ services:
     expose:
       - "27017"
     volumes:
-      - /home/mongo-data:/data/db
-    # App Service healthcheck'leri çoğunlukla yok sayar; yine de bırakmak istersen:
-    # healthcheck:
-    #   test: ["CMD-SHELL", "mongosh --quiet --eval \"db.runCommand({ ping: 1 }).ok\" || exit 1"]
-    #   interval: 5s
-    #   timeout: 5s
-    #   retries: 20
+      - ${WEBAPP_STORAGE_HOME}/mongo-data:/data/db   # ✅ required pattern
+    # (Optional) healthcheck is usually ignored by App Service
 
   api:
     image: team1acrmanual9.azurecr.io/dobook-api:latest
@@ -79,20 +71,14 @@ services:
       PORT: "27017"
     depends_on:
       - mongodb
-    # Seed scriptini çalıştır ve konteynerin kapanıp yeniden başlatılmaması için uykuya geç
     command: ["sh","-c","node seed.js && echo 'seed done' && tail -f /dev/null"]
 
   frontend:
     image: team1acrmanual9.azurecr.io/dobook-frontend:latest
     environment:
-      # Frontend içinden API'ye http://api:4000 ile erişeceksin
       API_HOST: api
       API_PORT: "4000"
     depends_on:
       - api
     ports:
-      - "80:80"  # App Service dış dünyaya 80/443 verir; 80 iç portu dinle
-    # Nginx/serve vb. 80'de dinlediğinden emin ol
-
-
-
+      - "80:80"   # App Service exposes 80/443 to the internet
