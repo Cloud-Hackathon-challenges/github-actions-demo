@@ -1,0 +1,54 @@
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:6-jammy
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.runCommand({ ping: 1 }).ok\" || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build:
+      context: ./api
+    environment:
+      PORT: 4000
+      MONGO_URI: mongodb://mongodb:27017/dobook
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    command: ["node", "server.js"]
+
+  mongo-seed:
+    build:
+      context: ./db-seed
+      args:
+        HOST: mongodb
+        PORT: 27017
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: "no"
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      API_HOST: api
+      API_PORT: 4000
+    depends_on:
+      - api
+    ports:
+      - "8080:80"
+
+volumes:
+  mongo-data:
+
