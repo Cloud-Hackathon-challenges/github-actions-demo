@@ -41,49 +41,6 @@
 #     ports:
 #       - "80:80"
 
-# version: "3.8"
-
-# services:
-#   mongodb:
-#     image: mongo:6-jammy
-#     restart: always
-#     expose:
-#       - "27017"
-#     volumes:
-#       - ${WEBAPP_STORAGE_HOME}/mongo-data:/data/db   # ✅ required pattern
-#     # (Optional) healthcheck is usually ignored by App Service
-
-#   api:
-#     image: team1acrmanual9.azurecr.io/dobook-api:latest
-#     environment:
-#       PORT: "4000"
-#       MONGO_URI: mongodb://mongodb:27017/dobook
-#     depends_on:
-#       - mongodb
-#     expose:
-#       - "4000"
-#     command: ["node", "server.js"]
-
-#   mongo-seed:
-#     image: team1acrmanual9.azurecr.io/dobook-seed:latest
-#     environment:
-#       HOST: mongodb
-#       PORT: "27017"
-#     depends_on:
-#       - mongodb
-#     command: ["sh","-c","node seed.js && echo 'seed done' && tail -f /dev/null"]
-
-#   frontend:
-#     image: team1acrmanual9.azurecr.io/dobook-frontend:latest
-#     environment:
-#       API_HOST: api
-#       API_PORT: "4000"
-#     depends_on:
-#       - api
-#     ports:
-#       - "80:80"   # App Service exposes 80/443 to the internet
-
-
 version: "3.8"
 
 services:
@@ -93,10 +50,11 @@ services:
     expose:
       - "27017"
     volumes:
-      - ${WEBAPP_STORAGE_HOME}/mongo-data:/data/db   # required on App Service
+      - ${WEBAPP_STORAGE_HOME}/mongo-data:/data/db   # ✅ required pattern
+    # (Optional) healthcheck is usually ignored by App Service
 
   api:
-    image: team1acrmanual9.azurecr.io/api:latest
+    image: team1acrmanual9.azurecr.io/dobook-api:latest
     environment:
       PORT: "4000"
       MONGO_URI: mongodb://mongodb:27017/dobook
@@ -107,21 +65,20 @@ services:
     command: ["node", "server.js"]
 
   mongo-seed:
-    image: team1acrmanual9.azurecr.io/db-seed:latest
+    image: team1acrmanual9.azurecr.io/dobook-seed:latest
     environment:
       HOST: mongodb
       PORT: "27017"
     depends_on:
       - mongodb
-    # keep container alive so the group stays healthy
     command: ["sh","-c","node seed.js && echo 'seed done' && tail -f /dev/null"]
 
   frontend:
-    image: team1acrmanual9.azurecr.io/frontend:latest
+    image: team1acrmanual9.azurecr.io/dobook-frontend:latest
     environment:
       API_HOST: api
       API_PORT: "4000"
     depends_on:
       - api
     ports:
-      - "80:80"   # App Service exposes 80/443 publicly
+      - "80:80"   # App Service exposes 80/443 to the internet
