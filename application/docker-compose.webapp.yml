@@ -3,52 +3,56 @@ version: "3.8"
 services:
   mongodb:
     image: mongo:6-jammy
-    tmpfs:
-      - /data/db
+    restart: always
+    # Azure'da container network kendi içinde erişebilir, dış port gerekmez
+    expose:
+      - "27017"
     healthcheck:
       test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1"]
       interval: 5s
-      timeout: 3s
-      retries: 60
-    restart: always
+      timeout: 5s
+      retries: 20
 
   api:
-    image: team1acrmanual9.azurecr.io/api:latest
+    image: team1acrmanual9.azurecr.io/api:latest   # build yerine image
     environment:
-      PORT: "4000"
-      MONGO_URI: "mongodb://mongodb:27017/dobook"
-      MONGO_CONNECT_RETRIES: "60"
-      MONGO_CONNECT_DELAY_MS: "2000"
+      PORT: 4000
+      MONGO_URI: mongodb://mongodb:27017/dobook
     depends_on:
       mongodb:
         condition: service_healthy
     expose:
       - "4000"
-    command: ["node","server.js"]
+    command: ["node", "server.js"]
     restart: always
 
   mongo-seed:
-    image: team1acrmanual9.azurecr.io/db-seed:latest
+    image: team1acrmanual9.azurecr.io/db-seed:latest   # build yerine image
     depends_on:
       mongodb:
         condition: service_healthy
     command: >
       sh -lc "
-        echo '⏳ waiting mongo';
+        echo 'waiting for mongo...';
         for i in $(seq 1 120); do
           mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break || sleep 2;
         done &&
         node seed.js &&
-        echo '✅ seed done' &&
+        echo 'seed done' &&
         tail -f /dev/null
       "
-    restart: always
+    restart: "no"
 
   frontend:
-    image: team1acrmanual9.azurecr.io/frontend:latest
+    image: team1acrmanual9.azurecr.io/frontend:latest  # build yerine image
+    environment:
+      API_HOST: api
+      API_PORT: 4000
     depends_on:
-      api:
-        condition: service_started
+      - api
     ports:
       - "80:80"
     restart: always
+
+volumes:
+  mongo-data:
