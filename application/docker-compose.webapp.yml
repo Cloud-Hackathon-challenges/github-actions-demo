@@ -2,42 +2,47 @@ version: "3.8"
 
 services:
   mongodb:
-    image: team1acrmanual9.azurecr.io/bib/mongo:5
+    # Kolay yol: public'ten çek
+    image: mongo:6-jammy
+    restart: always
+    expose:
+      - "27017"
+    volumes:
+      - ${WEBAPP_STORAGE_HOME}/mongo-data:/data/db
 
-  mongo-seed:
-    image: team1acrmanual9.azurecr.io/bib/mongo-seed:webapp
+  api:
+    image: team1acrmanual9.azurecr.io/api:latest
+    environment:
+      PORT: "4000"
+      MONGO_URI: mongodb://mongodb:27017/dobook
     depends_on:
       - mongodb
-    # Keep the container up after import so App Service group "healthy" kalsın.
+    expose:
+      - "4000"
+    command: ["node","server.js"]
+
+  mongo-seed:
+    image: team1acrmanual9.azurecr.io/db-seed:latest
+    environment:
+      HOST: mongodb
+      PORT: "27017"
+    depends_on:
+      - mongodb
+    # mongo hazır olana dek bekle + seed et + grup healthy kalsın
     command: >
       sh -c "
       echo '⏳ waiting mongo';
       for i in $(seq 1 60); do
-        mongosh --host mongodb:27017 --eval 'db.runCommand({ ping: 1 })' && break || sleep 2;
+        mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break || sleep 2;
       done &&
-      /seed/import.sh &&
-      echo '✅ seed done';
+      node seed.js &&
+      echo '✅ seed done' &&
       tail -f /dev/null
       "
 
-  api:
-    image: team1acrmanual9.azurecr.io/bib/api:latest
-    depends_on:
-      - mongodb
-    environment:
-      PORT: "4000"
-      MONGO_URI: mongodb://mongodb:27017/dobook
-    # App Service'in doğru porta prob atması için gerekli
-    ports:
-      - "4000:4000"
-
   frontend:
-    image: team1acrmanual9.azurecr.io/bib/frontend:latest
+    image: team1acrmanual9.azurecr.io/frontend:latest
     depends_on:
       - api
-    environment:
-      API_HOST: api
-      API_PORT: "4000"
-    ports:
-      - "80:80"
-
+    expose:
+      - "80"
