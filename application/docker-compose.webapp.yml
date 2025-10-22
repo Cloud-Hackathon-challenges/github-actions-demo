@@ -71,8 +71,8 @@ services:
   mongodb:
     image: mongo:6-jammy
     restart: always
-    expose:
-      - "27017"
+    ports:
+      - "27017:27017"
     healthcheck:
       test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1"]
       interval: 5s
@@ -88,8 +88,8 @@ services:
     depends_on:
       mongodb:
         condition: service_healthy
-    expose:
-      - "4000"
+    ports:
+      - "4000:4000"
     command: ["node","server.js"]
     restart: always
 
@@ -115,11 +115,10 @@ services:
     depends_on:
       api:
         condition: service_started
-    expose:
-      - "80"
+    ports:
+      - "8080:80"
     restart: always
 
-  # Public entry point + routing
   edge:
     image: nginx:alpine
     depends_on:
@@ -128,7 +127,7 @@ services:
       frontend:
         condition: service_started
     ports:
-      - "80:80"
+      - "80:80" # This is the public port Azure exposes
     command: >
       sh -lc "cat > /etc/nginx/nginx.conf <<'EOF'
       worker_processes  1;
@@ -139,18 +138,16 @@ services:
         server {
           listen 80;
 
-          # UI
           location / {
             proxy_pass http://frontend:80;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
           }
 
-          # API
           location /api/ {
             proxy_pass http://api:4000/;
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header Host \$host;
+            proxy_set_header X-Real-IP \$remote_addr;
             proxy_http_version 1.1;
           }
         }
