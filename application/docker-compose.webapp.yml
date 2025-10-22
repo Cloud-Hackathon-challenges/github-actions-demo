@@ -2,47 +2,53 @@ version: "3.8"
 
 services:
   mongodb:
-    # Kolay yol: public'ten çek
     image: mongo:6-jammy
+    tmpfs:
+      - /data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
     restart: always
-    expose:
-      - "27017"
-    volumes:
-      - ${WEBAPP_STORAGE_HOME}/mongo-data:/data/db
 
   api:
     image: team1acrmanual9.azurecr.io/api:latest
     environment:
       PORT: "4000"
-      MONGO_URI: mongodb://mongodb:27017/dobook
+      MONGO_URI: "mongodb://mongodb:27017/dobook"
+      MONGO_CONNECT_RETRIES: "60"
+      MONGO_CONNECT_DELAY_MS: "2000"
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     expose:
       - "4000"
     command: ["node","server.js"]
+    restart: always
 
   mongo-seed:
     image: team1acrmanual9.azurecr.io/db-seed:latest
-    environment:
-      HOST: mongodb
-      PORT: "27017"
     depends_on:
-      - mongodb
-    # mongo hazır olana dek bekle + seed et + grup healthy kalsın
+      mongodb:
+        condition: service_healthy
     command: >
-      sh -c "
-      echo '⏳ waiting mongo';
-      for i in $(seq 1 60); do
-        mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break || sleep 2;
-      done &&
-      node seed.js &&
-      echo '✅ seed done' &&
-      tail -f /dev/null
+      sh -lc "
+        echo '⏳ waiting mongo';
+        for i in $(seq 1 120); do
+          mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break || sleep 2;
+        done &&
+        node seed.js &&
+        echo '✅ seed done' &&
+        tail -f /dev/null
       "
+    restart: always
 
   frontend:
     image: team1acrmanual9.azurecr.io/frontend:latest
     depends_on:
-      - api
-    expose:
-      - "80"
+      api:
+        condition: service_started
+    ports:
+      - "80:80"
+    restart: always
