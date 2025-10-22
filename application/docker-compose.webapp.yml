@@ -1,10 +1,76 @@
+# version: "3.8"
+
+# services:
+#   mongodb:
+#     image: mongo:6-jammy
+#     restart: always
+#     ports:
+#       - "27017:27017"
+#     volumes:
+#       - mongo-data:/data/db
+#     healthcheck:
+#       test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1"]
+#       interval: 5s
+#       timeout: 5s
+#       retries: 20
+
+#   api:
+#     build:
+#       context: ./api
+#     environment:
+#       PORT: 4000
+#       MONGO_URI: mongodb://mongodb:27017/dobook
+#       MONGO_URL: mongodb://mongodb:27017/dobook   # kod MONGO_URL okuyorsa da çalışsın
+#     depends_on:
+#       mongodb:
+#         condition: service_healthy
+#     ports:
+#       - "4000:4000"
+#     command: ["node", "server.js"]
+#     restart: always
+
+#   mongo-seed:
+#     build:
+#       context: ./db-seed
+#       args:
+#         HOST: mongodb
+#         PORT: 27017
+#     environment:
+#       MONGO_URI: mongodb://mongodb:27017/dobook   # 🔑 seed.js bunu kullansın
+#     depends_on:
+#       mongodb:
+#         condition: service_healthy
+#     command: >
+#       sh -lc "echo 'waiting for mongo...';
+#       for i in $(seq 1 60); do
+#         mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break || sleep 2;
+#       done;
+#       node seed.js;
+#       echo 'seed done';
+#       tail -f /dev/null"
+#     restart: "no"
+
+#   frontend:
+#     build:
+#       context: ./frontend
+#     environment:
+#       API_HOST: api
+#       API_PORT: 4000
+#     depends_on:
+#       - api
+#     ports:
+#       - "8080:80"
+#     restart: always
+
+# volumes:
+#   mongo-data:
+
 version: "3.8"
 
 services:
   mongodb:
     image: mongo:6-jammy
     restart: always
-    # Azure'da container network kendi içinde erişebilir, dış port gerekmez
     expose:
       - "27017"
     healthcheck:
@@ -14,45 +80,81 @@ services:
       retries: 20
 
   api:
-    image: team1acrmanual9.azurecr.io/api:latest   # build yerine image
+    image: team1acrmanual9.azurecr.io/api:latest
     environment:
-      PORT: 4000
-      MONGO_URI: mongodb://mongodb:27017/dobook
+      PORT: "4000"
+      MONGO_URI: "mongodb://mongodb:27017/dobook"
+      MONGO_URL: "mongodb://mongodb:27017/dobook"
     depends_on:
       mongodb:
         condition: service_healthy
     expose:
       - "4000"
-    command: ["node", "server.js"]
+    command: ["node","server.js"]
     restart: always
 
   mongo-seed:
-    image: team1acrmanual9.azurecr.io/db-seed:latest   # build yerine image
+    image: team1acrmanual9.azurecr.io/db-seed:latest
+    environment:
+      MONGO_URI: "mongodb://mongodb:27017/dobook"
     depends_on:
       mongodb:
         condition: service_healthy
     command: >
-      sh -lc "
-        echo 'waiting for mongo...';
-        for i in $(seq 1 120); do
-          mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break || sleep 2;
-        done &&
-        node seed.js &&
-        echo 'seed done' &&
-        tail -f /dev/null
-      "
+      sh -lc "echo 'waiting for mongo...';
+      for i in $(seq 1 120); do
+        mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break || sleep 2;
+      done;
+      node seed.js;
+      echo 'seed done';
+      tail -f /dev/null"
     restart: "no"
 
   frontend:
-    image: team1acrmanual9.azurecr.io/frontend:latest  # build yerine image
-    environment:
-      API_HOST: api
-      API_PORT: 4000
+    image: team1acrmanual9.azurecr.io/frontend:latest
     depends_on:
-      - api
-    ports:
-      - "80:80"
+      api:
+        condition: service_started
+    expose:
+      - "80"
     restart: always
 
-volumes:
-  mongo-data:
+  # Public entry point + routing
+  edge:
+    image: nginx:alpine
+    depends_on:
+      api:
+        condition: service_started
+      frontend:
+        condition: service_started
+    ports:
+      - "80:80"
+    command: >
+      sh -lc "cat > /etc/nginx/nginx.conf <<'EOF'
+      worker_processes  1;
+      events { worker_connections 1024; }
+      http {
+        include       mime.types;
+        sendfile      on;
+        server {
+          listen 80;
+
+          # UI
+          location / {
+            proxy_pass http://frontend:80;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+          }
+
+          # API
+          location /api/ {
+            proxy_pass http://api:4000/;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_http_version 1.1;
+          }
+        }
+      }
+      EOF
+      nginx -g 'daemon off;'"
+    restart: always
