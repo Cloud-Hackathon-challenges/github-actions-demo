@@ -1,3 +1,4 @@
+# ---- Auth (Service Principal) ----
 variable "subscription_id" {
   description = "Azure Subscription ID"
   type        = string
@@ -19,6 +20,7 @@ variable "tenant_id" {
   type        = string
 }
 
+# ---- Common ----
 variable "resource_group_name" {
   description = "Name of the resource group"
   type        = string
@@ -31,21 +33,15 @@ variable "resource_group_location" {
   default     = "northeurope"
 }
 
+# ---- ACR ----
 variable "acr_name" {
-  description = "Name of the Azure Container Registry"
+  description = "Azure Container Registry name (globally unique, alnum)"
   type        = string
   default     = "team1acrmanual9"
 }
 
 variable "acr_sku" {
-  description = "SKU for the Azure Container Registry"
+  description = "ACR SKU (Basic, Standard, Premium)"
   type        = string
   default     = "Standard"
 }
-
-variable "acr_admin_enabled" {
-  description = "Enable admin user for the ACR"
-  type        = bool
-  default     = true
-}
-

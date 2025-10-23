@@ -1,0 +1,56 @@
+# this file worked whenever i tried in local development
+
+version: "3.8"
+
+services:
+  mongodb:
+    image: mongo:6-jammy
+    restart: always
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    image: localhost/application_api:latest     # <--- your local image
+    environment:
+      PORT: "4000"
+      MONGO_URI: "mongodb://mongodb:27017/dobook"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    ports:
+      - "4000:4000"
+    command: ["node","server.js"]
+    restart: always
+
+  mongo-seed:
+    image: localhost/application_mongo-seed:latest  # <--- local image
+    environment:
+      MONGO_URI: "mongodb://mongodb:27017/dobook"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    command: >
+      sh -lc "echo 'waiting for mongo...';
+      for i in $(seq 1 120); do
+        mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break || sleep 2;
+      done;
+      node seed.js;
+      echo 'seed done'"
+    restart: "no"
+
+  frontend:
+    image: localhost/application_frontend:latest   # <--- your local image
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "8080:80"
+    restart: always
+
+volumes:
+  mongo-data:
