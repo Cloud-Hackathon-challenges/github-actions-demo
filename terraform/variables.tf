@@ -33,3 +33,9 @@ variable "acr_sku" {
   default     = "Basic" # or Standard
 }
 
+variable "acr_admin_enabled" {
+  description = "Enable admin user (true keeps your current outputs working)"
+  type        = bool
+  default     = true
+}
+

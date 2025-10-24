@@ -1,13 +1,8 @@
 terraform {
   backend "azurerm" {
-    resource_group_name  = "team1tfstate-rg"   # from your list
-    storage_account_name = "team1tfstateacct"  # from your list
-    container_name       = "tfstate"           # you already created this
+    resource_group_name  = "team1tfstate-rg"
+    storage_account_name = "team1tfstateacct"
+    container_name       = "tfstate"
     key                  = "team1/infra.tfstate"
   }
 }
-
-provider "azurerm" {
-  features {}
-}
-#

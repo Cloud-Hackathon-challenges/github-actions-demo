@@ -2,7 +2,7 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~> 3.0"
+      version = "~>3.0"
     }
   }
 }
@@ -15,7 +15,7 @@ provider "azurerm" {
   tenant_id       = var.tenant_id
 }
 
-# Use existing RG (data, not resource)
+# RG zaten var (data kaynağıyla okuyoruz)
 data "azurerm_resource_group" "rg" {
   name = var.resource_group_name
 }
@@ -25,47 +25,35 @@ resource "azurerm_service_plan" "asp" {
   name                = "asp432"
   location            = data.azurerm_resource_group.rg.location
   resource_group_name = data.azurerm_resource_group.rg.name
-  os_type             = "Linux"
   sku_name            = "S1"
+  os_type             = "Linux"
 }
 
-# ACR (admin disabled; MI will pull)
-resource "azurerm_container_registry" "acr" {
+# ACR
+resource "azurerm_container_registry" "rcteamdev" {
   name                = var.acr_name
   resource_group_name = data.azurerm_resource_group.rg.name
   location            = data.azurerm_resource_group.rg.location
   sku                 = var.acr_sku
-  admin_enabled       = false
+  admin_enabled       = var.acr_admin_enabled
 }
 
-# Linux Web App with System Assigned MI
-resource "azurerm_linux_web_app" "app" {
+# Linux Web App
+resource "azurerm_linux_web_app" "as" {
   name                = "ass23847"
   resource_group_name = data.azurerm_resource_group.rg.name
   location            = data.azurerm_resource_group.rg.location
   service_plan_id     = azurerm_service_plan.asp.id
 
-  identity { type = "SystemAssigned" }
-
   site_config {}
+}
 
-  app_settings = {
-    WEBSITES_ENABLE_APP_SERVICE_STORAGE = "true"
-    WEBSITES_CONTAINER_START_TIME_LIMIT = "600"
+# Slot (Linux için doğru kaynak)
+resource "azurerm_linux_web_app_slot" "slot2" {
+  name           = "slot2"
+  app_service_id = azurerm_linux_web_app.as.id
+
+  site_config {
+    always_on = true
   }
-}
-
-# AcrPull role assignment (keep only if your TF identity can create role assignments)
-# If not, comment this out and do Option A above once via Owner user.
-resource "azurerm_role_assignment" "app_acr_pull" {
-  scope                = azurerm_container_registry.acr.id
-  role_definition_name = "AcrPull"
-  principal_id         = azurerm_linux_web_app.app.identity[0].principal_id
-}
-
-# Optional slot
-resource "azurerm_linux_web_app_slot" "staging" {
-  name           = "staging"
-  app_service_id = azurerm_linux_web_app.app.id
-  site_config {}
 }
