@@ -1,22 +1,18 @@
 variable "subscription_id" {
-  description = "Azure Subscription ID"
-  type        = string
+  type = string
 }
 
 variable "client_id" {
-  description = "Azure Client ID"
-  type        = string
+  type = string
 }
 
 variable "client_secret" {
-  description = "Azure Client Secret"
-  type        = string
-  sensitive   = true
+  type      = string
+  sensitive = true
 }
 
 variable "tenant_id" {
-  description = "Azure Tenant ID"
-  type        = string
+  type = string
 }
 
 variable "resource_group_name" {
@@ -48,4 +44,3 @@ variable "acr_admin_enabled" {
   type        = bool
   default     = true
 }
-
