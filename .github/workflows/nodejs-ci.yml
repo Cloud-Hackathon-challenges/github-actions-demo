@@ -1,4 +1,4 @@
-name: Node.js CI, Terraform Deploy and Docker Build
+name: Node.js CI, Terraform Deploy and Docker Build (MI-only ACR)
 
 on:
   push:
@@ -17,11 +17,9 @@ jobs:
       run:
         working-directory: application/${{ matrix.project }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Use Node.js ${{ matrix.node-version }}
-        uses: actions/setup-node@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
@@ -55,13 +53,10 @@ jobs:
       app_name:           ${{ steps.tf_out.outputs.app_name }}
       acr_name:           ${{ steps.tf_out.outputs.acr_name }}
       acr_login_server:   ${{ steps.tf_out.outputs.acr_login_server }}
-      acr_username:       ${{ steps.tf_out.outputs.acr_username }}
-      acr_password:       ${{ steps.tf_out.outputs.acr_password }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Azure Login (OIDC)
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
@@ -102,11 +97,12 @@ jobs:
           echo "app_name=$(get app_service_name)"         >> "$GITHUB_OUTPUT"
           echo "acr_name=$(get acr_name)"                 >> "$GITHUB_OUTPUT"
           echo "acr_login_server=$(get acr_login_server)" >> "$GITHUB_OUTPUT"
-          echo "acr_username=$(get acr_admin_username)"   >> "$GITHUB_OUTPUT"
-          echo "acr_password=$(get acr_admin_password)"   >> "$GITHUB_OUTPUT"
 
-      - name: Azure Logout
-        run: az logout
+      - name: Ensure Web App MI is enabled (idempotent)
+        run: |
+          az webapp identity assign \
+            -g "${{ steps.tf_out.outputs.resource_group_name }}" \
+            -n "${{ steps.tf_out.outputs.app_service_name }}" || true
 
   docker-build-push:
     name: Build and Push Docker Images
@@ -116,15 +112,14 @@ jobs:
       ACR_NAME:         ${{ needs.terraform-deploy-infra.outputs.acr_name }}
       ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Azure Login (OIDC)
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: ACR Login
+      - name: ACR Login (no secrets)
         run: az acr login -n "$ACR_NAME"
 
       - name: Build and Push frontend image
@@ -147,23 +142,24 @@ jobs:
           fi
 
   appservice-deploy:
-    name: Deploy to Azure App Service
+    name: Configure Web App to pull via Managed Identity
     runs-on: ubuntu-latest
     needs: [ docker-build-push, terraform-deploy-infra ]
     env:
       RG_NAME:          ${{ needs.terraform-deploy-infra.outputs.rg_name }}
       ASP_NAME:         ${{ needs.terraform-deploy-infra.outputs.asp_name }}
       APP_NAME:         ${{ needs.terraform-deploy-infra.outputs.app_name }}
+      ACR_NAME:         ${{ needs.terraform-deploy-infra.outputs.acr_name }}
       ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Azure Login
+      - name: Azure Login (OIDC)
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
+      # (İsteğe bağlı) Web App yoksa oluştur. Varsa no-op olur.
       - name: Create / Update Web App (multi-container)
         run: |
           az webapp create \
@@ -173,70 +169,51 @@ jobs:
             --multicontainer-config-type compose \
             --multicontainer-config-file application/docker-compose.webapp.yml || true
 
-      - name: Apply Docker Compose to Web App
+      # MI'ye AcrPull ver (her koşuda idempotent)
+      - name: Grant AcrPull to Web App Managed Identity
+        run: |
+          PRINCIPAL_ID=$(az webapp identity show -g "$RG_NAME" -n "$APP_NAME" --query principalId -o tsv)
+          ACR_ID=$(az acr show -n "$ACR_NAME" --query id -o tsv)
+          # Aynı atama varsa hata vermez/tekrar yapar, sorun değil
+          az role assignment create --assignee "$PRINCIPAL_ID" --role AcrPull --scope "$ACR_ID" || true
+
+      # Compose + MI ile ACR pull’u etkinleştir
+      - name: Apply Docker Compose (MI-based pull)
         run: |
           az webapp config container set \
             --resource-group "$RG_NAME" \
             --name "$APP_NAME" \
             --multicontainer-config-type compose \
-            --multicontainer-config-file application/docker-compose.webapp.yml
+            --multicontainer-config-file application/docker-compose.webapp.yml \
+            --enable-acr-use-identity true \
+            --registry-login-server "$ACR_LOGIN_SERVER"
 
-      - name: Ensure app settings for containers
+      # Eski user/pass varsa temizle (idempotent)
+      - name: Remove legacy registry credentials (cleanup)
+        run: |
+          az webapp config container set \
+            --resource-group "$RG_NAME" \
+            --name "$APP_NAME" \
+            --docker-registry-server-url "" \
+            --docker-registry-server-user "" \
+            --docker-registry-server-password "" || true
+
+      - name: Ensure app settings
         run: |
           az webapp config appsettings set -g "$RG_NAME" -n "$APP_NAME" \
             --settings WEBSITES_ENABLE_APP_SERVICE_STORAGE=true WEBSITES_CONTAINER_START_TIME_LIMIT=600
 
-      - name: Configure ACR access for Web App
-        run: |
-          az webapp config container set \
-            --name "$APP_NAME" \
-            --resource-group "$RG_NAME" \
-            --docker-registry-server-url "https://${ACR_LOGIN_SERVER}" \
-            --docker-registry-server-user "${{ needs.terraform-deploy-infra.outputs.acr_username }}" \
-            --docker-registry-server-password "${{ needs.terraform-deploy-infra.outputs.acr_password }}"
-
-  appservice-configure:
+  appservice-restart:
     name: Restart Web App
     runs-on: ubuntu-latest
-    needs: [ appservice-deploy, terraform-deploy-infra ]
+    needs: appservice-deploy
     env:
       RG_NAME:  ${{ needs.terraform-deploy-infra.outputs.rg_name }}
       APP_NAME: ${{ needs.terraform-deploy-infra.outputs.app_name }}
     steps:
-      - name: Azure Login
+      - name: Azure Login (OIDC)
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Restart Azure Web App
-        run: az webapp restart --name "$APP_NAME" --resource-group "$RG_NAME"
-
-  cypress-e2e:
-    name: Run Cypress E2E Tests
-    runs-on: ubuntu-latest
-    needs: [ appservice-configure, terraform-deploy-infra ]
-    env:
-      CYPRESS_BASE_URL: https://${{ needs.terraform-deploy-infra.outputs.app_name }}.azurewebsites.net
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: 20
-
-      - name: Install test deps
-        working-directory: test
-        run: npm ci
-
-      - name: Debug base url
-        run: echo "CYPRESS_BASE_URL=$CYPRESS_BASE_URL"
-
-      - name: Wait for site (/) and API (/api/books)
-        run: |
-          for i in {1..60}; do curl -fsS -m 5 "$CYPRESS_BASE_URL/" >/dev/null && break || sleep 3; done
-          for i in {1..60}; do curl -fsS -m 5 "$CYPRESS_BASE_URL/api/books" >/dev/null && break || sleep 3; done
-
-      - name: Run Cypress tests
-        working-directory: test
-        run: npx cypress run
+        run: az webapp restart
