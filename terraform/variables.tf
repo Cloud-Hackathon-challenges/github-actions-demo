@@ -1,34 +1,51 @@
-variable "subscription_id" { type = string }
-variable "client_id"       { type = string }
-variable "client_secret"   { type = string  sensitive = true }
-variable "tenant_id"       { type = string }
+variable "subscription_id" {
+  description = "Azure Subscription ID"
+  type        = string
+}
+
+variable "client_id" {
+  description = "Azure Client ID"
+  type        = string
+}
+
+variable "client_secret" {
+  description = "Azure Client Secret"
+  type        = string
+  sensitive   = true
+}
+
+variable "tenant_id" {
+  description = "Azure Tenant ID"
+  type        = string
+}
 
 variable "resource_group_name" {
-  description = "RG name to create/manage"
+  description = "Name of the resource group"
   type        = string
-  default     = "team1-rg-manual9"
+  default     = "team1-rg-manual6"
 }
 
 variable "resource_group_location" {
-  description = "Azure region for the RG"
+  description = "Location for the resource group"
   type        = string
   default     = "northeurope"
 }
 
 variable "acr_name" {
-  description = "ACR name"
+  description = "Name of the Azure Container Registry"
   type        = string
-  default     = "team1acrmanual9"
+  default     = "team1acrmanual6"
 }
 
 variable "acr_sku" {
-  description = "ACR SKU"
+  description = "SKU for the Azure Container Registry"
   type        = string
-  default     = "Basic" # or Standard
+  default     = "Standard"
 }
 
 variable "acr_admin_enabled" {
-  description = "Enable ACR admin user"
+  description = "Enable admin user for the ACR"
   type        = bool
   default     = true
 }
+

@@ -15,50 +15,47 @@ provider "azurerm" {
   tenant_id       = var.tenant_id
 }
 
-# Create & manage the Resource Group
-resource "azurerm_resource_group" "rg" {
+resource "azurerm_resource_group" "rg-registry" {
   name     = var.resource_group_name
   location = var.resource_group_location
 
   lifecycle {
     prevent_destroy = true
+    ignore_changes = []
   }
 }
 
-# App Service Plan
 resource "azurerm_service_plan" "asp" {
   name                = "asp432"
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg-registry.location
+  resource_group_name = azurerm_resource_group.rg-registry.name
   sku_name            = "S1"
   os_type             = "Linux"
-}
+} 
 
-# ACR
 resource "azurerm_container_registry" "rcteamdev" {
   name                = var.acr_name
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg-registry.name
+  location            = azurerm_resource_group.rg-registry.location
   sku                 = var.acr_sku
   admin_enabled       = var.acr_admin_enabled
 }
 
-# Linux Web App
 resource "azurerm_linux_web_app" "as" {
   name                = "ass23847"
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg-registry.name
+  location            = azurerm_resource_group.rg-registry.location
   service_plan_id     = azurerm_service_plan.asp.id
 
   site_config {}
 }
 
-# Linux Web App Slot
-resource "azurerm_linux_web_app_slot" "slot2" {
-  name           = "slot2"
-  app_service_id = azurerm_linux_web_app.as.id
 
-  site_config {
-    always_on = true
-  }
-}
+resource "azurerm_app_service_slot" "slot1" {
+  name                = "slot1"
+  app_service_name    = azurerm_linux_web_app.as.name
+  location            = azurerm_resource_group.rg-registry.location
+  resource_group_name = azurerm_resource_group.rg-registry.name
+  app_service_plan_id = azurerm_service_plan.asp.id
+
+} 
