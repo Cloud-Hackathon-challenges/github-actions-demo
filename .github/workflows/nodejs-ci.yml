@@ -17,17 +17,17 @@ jobs:
       run:
         working-directory: application/${{ matrix.project }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v3
         with:
           node-version: ${{ matrix.node-version }}
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: application/${{ matrix.project }}/package-lock.json
 
-      - name: Install dependencies
+      - name: Install deps
         run: npm ci
 
       - name: Run tests (non-blocking)
@@ -46,11 +46,6 @@ jobs:
     name: Deploy Azure Infrastructure with Terraform
     runs-on: ubuntu-latest
     needs: test
-    env:
-      AZURE_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
-      AZURE_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
-      AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      AZURE_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
     defaults:
       run:
         working-directory: ./terraform
@@ -63,7 +58,7 @@ jobs:
       acr_username:       ${{ steps.tf_out.outputs.acr_username }}
       acr_password:       ${{ steps.tf_out.outputs.acr_password }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Azure Login
@@ -75,7 +70,7 @@ jobs:
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.7
-          terraform_wrapper: false   # important: avoid ::debug:: noise
+          terraform_wrapper: false
 
       - name: Create dev.tfvars from GitHub Secrets
         run: |
@@ -121,7 +116,7 @@ jobs:
       ACR_NAME:         ${{ needs.terraform-deploy-infra.outputs.acr_name }}
       ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Azure Login
@@ -129,24 +124,23 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Parolasız login: admin user gerekmez
-      - name: ACR Login (no admin user)
+      - name: ACR Login
         run: az acr login -n "$ACR_NAME"
 
       - name: Build and Push frontend image
         run: |
-          docker build -t $ACR_LOGIN_SERVER/frontend:latest ./application/frontend
+          docker build --platform linux/amd64 -t $ACR_LOGIN_SERVER/frontend:latest ./application/frontend
           docker push $ACR_LOGIN_SERVER/frontend:latest
 
       - name: Build and Push api image
         run: |
-          docker build -t $ACR_LOGIN_SERVER/api:latest ./application/api
+          docker build --platform linux/amd64 -t $ACR_LOGIN_SERVER/api:latest ./application/api
           docker push $ACR_LOGIN_SERVER/api:latest
 
       - name: Build and Push db-seed image (if exists)
         run: |
           if [ -d "./application/db-seed" ]; then
-            docker build -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
+            docker build --platform linux/amd64 -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
             docker push $ACR_LOGIN_SERVER/db-seed:latest
           else
             echo "db-seed directory not found, skipping."
@@ -162,7 +156,7 @@ jobs:
       APP_NAME:         ${{ needs.terraform-deploy-infra.outputs.app_name }}
       ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Azure Login
@@ -179,12 +173,27 @@ jobs:
             --multicontainer-config-type compose \
             --multicontainer-config-file application/docker-compose.webapp.yml || true
 
+      - name: Apply Docker Compose to Web App
+        run: |
+          az webapp config container set \
+            --resource-group "$RG_NAME" \
+            --name "$APP_NAME" \
+            --multicontainer-config-type compose \
+            --multicontainer-config-file application/docker-compose.webapp.yml
+
+      - name: Ensure app settings for containers
+        run: |
+          az webapp config appsettings set -g "$RG_NAME" -n "$APP_NAME" \
+            --settings WEBSITES_ENABLE_APP_SERVICE_STORAGE=true WEBSITES_CONTAINER_START_TIME_LIMIT=600
+
       - name: Configure ACR access for Web App
         run: |
           az webapp config container set \
             --name "$APP_NAME" \
             --resource-group "$RG_NAME" \
-            --docker-registry-server-url "https://${ACR_LOGIN_SERVER}"
+            --docker-registry-server-url "https://${ACR_LOGIN_SERVER}" \
+            --docker-registry-server-user "${{ needs.terraform-deploy-infra.outputs.acr_username }}" \
+            --docker-registry-server-password "${{ needs.terraform-deploy-infra.outputs.acr_password }}"
 
   appservice-configure:
     name: Restart Web App
@@ -198,32 +207,36 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-
       - name: Restart Azure Web App
         run: az webapp restart --name "$APP_NAME" --resource-group "$RG_NAME"
 
   cypress-e2e:
     name: Run Cypress E2E Tests
     runs-on: ubuntu-latest
-    needs: appservice-configure
+    needs: [ appservice-configure, terraform-deploy-infra ]
     env:
-      APP_NAME: ${{ needs.terraform-deploy-infra.outputs.app_name }}
+      CYPRESS_BASE_URL: https://${{ needs.terraform-deploy-infra.outputs.app_name }}.azurewebsites.net
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
-          
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install test deps
         working-directory: test
+        run: npm ci
+
+      - name: Debug base url
+        run: echo "CYPRESS_BASE_URL=$CYPRESS_BASE_URL"
+
+      - name: Wait for site (/) and API (/api/books)
+        run: |
+          for i in {1..60}; do curl -fsS -m 5 "$CYPRESS_BASE_URL/" >/dev/null && break || sleep 3; done
+          for i in {1..60}; do curl -fsS -m 5 "$CYPRESS_BASE_URL/api/books" >/dev/null && break || sleep 3; done
 
       - name: Run Cypress tests
-        run: npx cypress run
         working-directory: test
-        env:
-          CYPRESS_BASE_URL: https://${{ env.APP_NAME }}.azurewebsites.net
-          TERM: xterm-256color
+        run: npx cypress run
