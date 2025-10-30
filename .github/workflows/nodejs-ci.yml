@@ -60,12 +60,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # This logs in az CLI (useful later for az commands),
-      # but Terraform backend will auth via ARM_* env vars below.
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      # IMPORTANT: Do NOT Azure CLI login before TF init. Backend must use ARM_* env, not az CLI.
+      - name: Ensure no Azure CLI login is active
+        run: az logout || true
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
@@ -90,7 +87,7 @@ jobs:
           enable_staging_slot   = true
           EOF
 
-      - name: Terraform Init
+      - name: Terraform Init (authenticate via ARM_* env)
         env:
           ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
           ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
@@ -128,9 +125,6 @@ jobs:
           echo "acr_login_server=$(get acr_login_server)" >> "$GITHUB_OUTPUT"
           echo "acr_username=$(get acr_admin_username)"   >> "$GITHUB_OUTPUT"
           echo "acr_password=$(get acr_admin_password)"   >> "$GITHUB_OUTPUT"
-
-      - name: Azure Logout
-        run: az logout
 
   docker-build-push:
     name: Build and Push Docker Images
