@@ -11,7 +11,7 @@ services:
       retries: 120
 
   api:
-    image: team1acrmanual9.azurecr.io/api:latest
+    image: team1acrmanual6.azurecr.io/api:latest
     environment:
       PORT: "4000"
       MONGO_URI: "mongodb://mongodb:27017/dobook"
@@ -21,7 +21,7 @@ services:
     restart: always
 
   mongo-seed:
-    image: team1acrmanual9.azurecr.io/db-seed:latest
+    image: team1acrmanual6.azurecr.io/db-seed:latest
     environment:
       MONGO_URI: "mongodb://mongodb:27017/dobook"
     depends_on:
@@ -36,7 +36,7 @@ services:
     restart: "no"
 
   frontend:
-    image: team1acrmanual9.azurecr.io/frontend:latest
+    image: team1acrmanual6.azurecr.io/frontend:latest
     depends_on:
       - api
     restart: always
