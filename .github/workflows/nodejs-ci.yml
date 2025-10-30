@@ -60,6 +60,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # This logs in az CLI (useful later for az commands),
+      # but Terraform backend will auth via ARM_* env vars below.
       - name: Azure Login
         uses: azure/login@v1
         with:
@@ -89,14 +91,29 @@ jobs:
           EOF
 
       - name: Terraform Init
+        env:
+          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform init -input=false -no-color
 
       - name: Terraform Plan
         id: plan
+        env:
+          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform plan -no-color -input=false -var-file="dev.tfvars"
 
       - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
+        env:
+          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform apply -auto-approve -input=false -var-file="dev.tfvars"
 
       - name: Export Terraform outputs for next jobs
@@ -247,3 +264,4 @@ jobs:
       - name: Run Cypress tests
         working-directory: test
         run: npx cypress run
+
