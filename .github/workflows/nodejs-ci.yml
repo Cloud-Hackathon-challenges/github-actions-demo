@@ -73,13 +73,19 @@ jobs:
 
       - name: Create dev.tfvars from GitHub Secrets
         run: |
-          cat <<EOF > dev.tfvars
-          client_id       = "${{ secrets.AZURE_CLIENT_ID }}"
-          client_secret   = "${{ secrets.AZURE_CLIENT_SECRET }}"
-          tenant_id       = "${{ secrets.AZURE_TENANT_ID }}"
-          subscription_id = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          app_service_plan_name = "asp432"
-          app_service_name      = "ass23847"
+          cat <<'EOF' > dev.tfvars
+          client_id             = "${{ secrets.AZURE_CLIENT_ID }}"
+          client_secret         = "${{ secrets.AZURE_CLIENT_SECRET }}"
+          tenant_id             = "${{ secrets.AZURE_TENANT_ID }}"
+          subscription_id       = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+          location              = "westeurope"
+          resource_group_name   = "team1-rg-auto"
+          acr_name              = "team1acrauto123"
+          app_service_plan_name = "team1-asp-auto"
+          app_service_plan_sku  = "B1"
+          app_service_name      = "team1-webapp-auto"
+          enable_staging_slot   = true
           EOF
 
       - name: Terraform Init

@@ -1,63 +1,64 @@
-terraform {
-  required_providers {
-    azurerm = {
-      source  = "hashicorp/azurerm"
-      version = "~> 3.0"
-    }
-  }
+# --- Create RG ---
+resource "azurerm_resource_group" "rg" {
+  name     = var.resource_group_name
+  location = var.location
 }
 
-provider "azurerm" {
-  features {}
-  subscription_id = var.subscription_id
-  client_id       = var.client_id
-  client_secret   = var.client_secret
-  tenant_id       = var.tenant_id
-}
-
-# --- MEVCUT kaynaklar: sadece oku (silme/yeniden kurma yok) ---
-data "azurerm_resource_group" "rg" {
-  name = var.resource_group_name
-}
-
-data "azurerm_service_plan" "asp" {
-  name                = var.app_service_plan_name   # ör: "asp432"
-  resource_group_name = data.azurerm_resource_group.rg.name
-}
-
-data "azurerm_container_registry" "acr" {
+# --- Create ACR (admin enabled for convenience) ---
+resource "azurerm_container_registry" "acr" {
   name                = var.acr_name
-  resource_group_name = data.azurerm_resource_group.rg.name
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  sku                 = "Basic"
+  admin_enabled       = true
 }
 
-# --- YENİ oluşturulacaklar ---
+# --- Create App Service Plan (Linux) ---
+resource "azurerm_service_plan" "asp" {
+  name                = var.app_service_plan_name
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  os_type             = "Linux"
+  sku_name            = var.app_service_plan_sku
+}
+
+# --- Create Linux Web App with System-Assigned Identity ---
 resource "azurerm_linux_web_app" "app" {
-  name                = var.app_service_name        # ör: "ass23847"
-  resource_group_name = data.azurerm_resource_group.rg.name
-  location            = data.azurerm_resource_group.rg.location
-  service_plan_id     = data.azurerm_service_plan.asp.id
+  name                = var.app_service_name
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
+  service_plan_id     = azurerm_service_plan.asp.id
 
   identity {
     type = "SystemAssigned"
   }
 
   site_config {}
+
   app_settings = {
     WEBSITES_ENABLE_APP_SERVICE_STORAGE = "true"
     WEBSITES_CONTAINER_START_TIME_LIMIT = "600"
   }
+
+  lifecycle {
+    ignore_changes = [
+      # We set the container via CLI with docker-compose in your workflow
+      site_config
+    ]
+  }
 }
 
-# (İstersen) staging slot
+# --- Optional staging slot ---
 resource "azurerm_linux_web_app_slot" "staging" {
-  name           = "staging"
+  count         = var.enable_staging_slot ? 1 : 0
+  name          = "staging"
   app_service_id = azurerm_linux_web_app.app.id
   site_config {}
 }
 
-# Web App’in Managed Identity’sine ACR pull izni
+# --- Grant the Web App identity 'AcrPull' on the ACR ---
 resource "azurerm_role_assignment" "app_acr_pull" {
-  scope                = data.azurerm_container_registry.acr.id
+  scope                = azurerm_container_registry.acr.id
   role_definition_name = "AcrPull"
   principal_id         = azurerm_linux_web_app.app.identity[0].principal_id
 }
