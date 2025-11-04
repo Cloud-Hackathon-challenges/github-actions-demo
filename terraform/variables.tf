@@ -34,7 +34,7 @@ variable "acr_name" {
 
 variable "app_service_plan_name" {
   type        = string
-  description = "App Service Plan name to create"
+  description = "App Service Plan name to create one"
 }
 
 variable "app_service_plan_sku" {
