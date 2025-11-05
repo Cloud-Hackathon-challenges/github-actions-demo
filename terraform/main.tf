@@ -5,16 +5,9 @@ terraform {
       version = "~> 3.0"
     }
   }
-
-  backend "azurerm" {
-    resource_group_name  = "team1tfstate-rg"
-    storage_account_name = "team1tfstateacct"
-    container_name       = "tfstate"
-    key                  = "team1/infra.tfstate"
-  }
 }
 
-# Auth: ARM_* env değişkenleri (CI’de secrets) ile gelir
+# Auth: ARM_* env değişkenleri (CI veya local ortamdan)
 provider "azurerm" {
   features {}
 }
@@ -57,10 +50,12 @@ resource "azurerm_linux_web_app" "app" {
   location            = azurerm_resource_group.rg.location
   service_plan_id     = azurerm_service_plan.asp.id
 
-  identity { type = "SystemAssigned" }
+  identity {
+    type = "SystemAssigned"
+  }
 
   site_config {
-    # Docker compose deploy'u workflow'da az cli ile yapılacak.
+    # Docker compose deploy workflow'da az cli ile yapılacak.
   }
 }
 
