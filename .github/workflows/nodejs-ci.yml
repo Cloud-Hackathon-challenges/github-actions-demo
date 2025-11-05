@@ -60,54 +60,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1) Azure'a login + doğru aboneliğe geç + backend kaynaklarını oluştur
+      # --- Backend bootstrap: RG/SA/container oluştur ---
       - name: Azure Login (for backend bootstrap)
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Ensure Terraform backend resources exist (RG/SA/container)
+      - name: Ensure Terraform backend resources exist (RG/SA/container) + verify subscription
         env:
           SUB_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: |
           set -e
           RG="team1tfstate-rg"
-          SA="team1tfstateacct"
+          SA="team1tfstateacct"   # Gerekirse benzersiz bir ad ver: team1tfstateacct01
           CONTAINER="tfstate"
           LOCATION="westeurope"
 
-          echo ">> Set subscription"
+          echo ">>> Using subscription: $SUB_ID"
           az account set --subscription "$SUB_ID"
+          az account show --query "{sub:id, tenant:tenantId}" -o tsv
 
-          echo ">> Ensure RG"
           az group create -n "$RG" -l "$LOCATION" 1>/dev/null
+          az storage account create -n "$SA" -g "$RG" -l "$LOCATION" --sku Standard_LRS --encryption-services blob 1>/dev/null || true
 
-          echo ">> Ensure Storage Account (may be globally unique, ignore NameTaken)"
-          az storage account create \
-            -n "$SA" -g "$RG" -l "$LOCATION" \
-            --sku Standard_LRS --encryption-services blob 1>/dev/null || true
-
-          echo ">> Wait until Storage Account is resolvable in this RG"
-          for i in {1..20}; do
-            az storage account show -n "$SA" -g "$RG" 1>/dev/null && break || sleep 5
+          # SA'nın görünmesi için kısa bekleme (propagation)
+          for i in {1..30}; do
+            az storage account show -n "$SA" -g "$RG" 1>/dev/null && break || sleep 2
           done
 
-          echo ">> Ensure blob container"
-          az storage container create \
-            --name "$CONTAINER" --account-name "$SA" 1>/dev/null || true
+          az storage container create --name "$CONTAINER" --account-name "$SA" 1>/dev/null || true
 
-      # 2) Logout: Terraform ARM_* ile authenticate etsin
       - name: Ensure no Azure CLI login is active
         run: az logout || true
 
-      # 3) Terraform setup
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.7
           terraform_wrapper: false
 
-      # 4) dev.tfvars (sade)
       - name: Create dev.tfvars from GitHub Secrets
         run: |
           cat <<'EOF' > dev.tfvars
@@ -120,7 +111,7 @@ jobs:
           resource_group_name   = "team1-rg-auto"
           acr_name              = "team1acrauto123"
           app_service_plan_name = "team1-asp-auto"
-          app_service_plan_sku  = "B1"       # kapasite sorunu olursa S1
+          app_service_plan_sku  = "B1"
           app_service_name      = "team1-webapp-auto"
           EOF
 
@@ -133,7 +124,6 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform init -input=false -no-color
 
-      # 6) Plan
       - name: Terraform Plan
         id: plan
         env:
@@ -143,7 +133,6 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform plan -no-color -input=false -var-file="dev.tfvars"
 
-      # 7) Apply (basit retry)
       - name: Terraform Apply (with simple retry)
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         env:
@@ -160,21 +149,42 @@ jobs:
           echo "Apply failed after retries." >&2
           exit 1
 
-      # 8) Output'lar
       - name: Export Terraform outputs for next jobs
         id: tf_out
         shell: bash
         run: |
+          set -e
           get() { terraform output -raw "$1" 2>/dev/null | tr -d '\r'; }
-          echo "rg_name=$(get resource_group_name)"       >> "$GITHUB_OUTPUT"
-          echo "asp_name=$(get app_service_plan)"         >> "$GITHUB_OUTPUT"
-          echo "app_name=$(get app_service_name)"         >> "$GITHUB_OUTPUT"
-          echo "acr_name=$(get acr_name)"                 >> "$GITHUB_OUTPUT"
-          echo "acr_login_server=$(get acr_login_server)" >> "$GITHUB_OUTPUT"
-          echo "acr_username=$(get acr_admin_username)"   >> "$GITHUB_OUTPUT"
-          echo "acr_password=$(get acr_admin_password)"   >> "$GITHUB_OUTPUT"
+          RG=$(get resource_group_name)
+          ASP=$(get app_service_plan)
+          APP=$(get app_service_name)
+          ACR=$(get acr_name)
+          ACRLS=$(get acr_login_server)
+          ACRU=$(get acr_admin_username)
+          ACRP=$(get acr_admin_password)
 
+          # Outputs yaz
+          echo "rg_name=$RG"            >> "$GITHUB_OUTPUT"
+          echo "asp_name=$ASP"          >> "$GITHUB_OUTPUT"
+          echo "app_name=$APP"          >> "$GITHUB_OUTPUT"
+          echo "acr_name=$ACR"          >> "$GITHUB_OUTPUT"
+          echo "acr_login_server=$ACRLS">> "$GITHUB_OUTPUT"
+          echo "acr_username=$ACRU"     >> "$GITHUB_OUTPUT"
+          echo "acr_password=$ACRP"     >> "$GITHUB_OUTPUT"
+
+          # Zorunlu alanlar boşsa fail et (PR'da apply atlamışsa ileriyi durdurur)
+          MISSING=0
+          for key in RG ASP APP ACR ACRLS; do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing Terraform output: $key"
+              MISSING=1
+            fi
+          done
+          exit $MISSING
+
+  # --- Bu job ve devamı sadece ACR output'ı doluysa çalışır ---
   docker-build-push:
+    if: needs.terraform-deploy-infra.outputs.acr_name != ''
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
     needs: terraform-deploy-infra
@@ -207,6 +217,7 @@ jobs:
           fi
 
   appservice-deploy:
+    if: needs.terraform-deploy-infra.outputs.acr_name != ''
     name: Deploy to Azure App Service
     runs-on: ubuntu-latest
     needs: [ docker-build-push, terraform-deploy-infra ]
@@ -248,6 +259,7 @@ jobs:
             --settings WEBSITES_ENABLE_APP_SERVICE_STORAGE=true WEBSITES_CONTAINER_START_TIME_LIMIT=600
 
   appservice-restart:
+    if: needs.terraform-deploy-infra.outputs.acr_name != ''
     name: Restart Web App
     runs-on: ubuntu-latest
     needs: appservice-deploy
@@ -263,6 +275,7 @@ jobs:
         run: az webapp restart --name "$APP_NAME" --resource-group "$RG_NAME"
 
   cypress-e2e:
+    if: needs.terraform-deploy-infra.outputs.acr_name != ''
     name: Run Cypress E2E Tests
     runs-on: ubuntu-latest
     needs: [ appservice-restart, terraform-deploy-infra ]
