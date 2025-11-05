@@ -5,9 +5,16 @@ terraform {
       version = "~> 3.0"
     }
   }
+
+  backend "azurerm" {
+    resource_group_name  = "team1tfstate-rg"
+    storage_account_name = "team1tfstateacct"
+    container_name       = "tfstate"
+    key                  = "team1/infra.tfstate"
+  }
 }
 
-# Auth: ARM_* env değişkenleri (CI veya local ortamdan)
+# Auth: ARM_* env değişkenleri (CI veya local)
 provider "azurerm" {
   features {}
 }
@@ -30,11 +37,11 @@ resource "azurerm_service_plan" "asp" {
   name                = var.app_service_plan_name
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
-  sku_name            = var.app_service_plan_sku
+  sku_name            = var.app_service_plan_sku  # B1/S1/...
   os_type             = "Linux"
 }
 
-# Azure Container Registry
+# Azure Container Registry (admin açık: workflow ACR cred kullanacak)
 resource "azurerm_container_registry" "acr" {
   name                = var.acr_name
   resource_group_name = azurerm_resource_group.rg.name
@@ -43,34 +50,30 @@ resource "azurerm_container_registry" "acr" {
   admin_enabled       = var.acr_admin_enabled
 }
 
-# Linux Web App (SystemAssigned Managed Identity)
+# Linux Web App (SystemAssigned MI – RBAC vermiyoruz)
 resource "azurerm_linux_web_app" "app" {
   name                = var.app_service_name
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
   service_plan_id     = azurerm_service_plan.asp.id
 
-  identity {
-    type = "SystemAssigned"
-  }
+  identity { type = "SystemAssigned" }
 
   site_config {
-    # Docker compose deploy workflow'da az cli ile yapılacak.
+    always_on  = true
+    ftps_state = "Disabled"
   }
 }
 
-# (Opsiyonel) Staging slot (flag ile kontrol)
-resource "azurerm_linux_web_app_slot" "slot" {
-  count          = var.enable_staging_slot ? 1 : 0
-  name           = "staging"
-  app_service_id = azurerm_linux_web_app.app.id
+/* NOT: B1 SKU'da slot desteklenmez → slot kaynağını kaldırdık.
+resource "azurerm_linux_web_app_slot" "slot" { ... }
+*/
 
-  site_config {}
-}
-
-# Web App MI -> ACR Pull yetkisi
+# NOT: RBAC ile AcrPull 403 veriyordu; ACR admin cred ile ilerliyoruz.
+/*
 resource "azurerm_role_assignment" "acr_pull_for_app" {
   scope                = azurerm_container_registry.acr.id
   role_definition_name = "AcrPull"
   principal_id         = azurerm_linux_web_app.app.identity[0].principal_id
 }
+*/

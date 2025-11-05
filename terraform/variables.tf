@@ -22,7 +22,7 @@ variable "tenant_id" {
 variable "location" {
   description = "Azure location/region"
   type        = string
-  default     = "northeurope"
+  default     = "westeurope"
 }
 
 variable "resource_group_name" {
@@ -65,10 +65,4 @@ variable "app_service_name" {
   description = "Linux Web App name"
   type        = string
   default     = "team1-webapp-auto"
-}
-
-variable "enable_staging_slot" {
-  description = "Create staging slot?"
-  type        = bool
-  default     = true
 }
