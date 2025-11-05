@@ -19,33 +19,56 @@ variable "tenant_id" {
   type        = string
 }
 
-variable "resource_group_name" {
-  description = "Name of the resource group"
+variable "location" {
+  description = "Azure location/region"
   type        = string
-  default     = "team1-rg-manual6"
+  default     = "westeurope"
 }
 
-variable "resource_group_location" {
-  description = "Location for the resource group"
+variable "resource_group_name" {
+  description = "Resource Group name"
   type        = string
-  default     = "northeurope"
+  default     = "team1-rg-auto"
 }
 
 variable "acr_name" {
-  description = "Name of the Azure Container Registry"
+  description = "Azure Container Registry name"
   type        = string
-  default     = "team1acrmanual6"
+  default     = "team1acrauto123"
 }
 
 variable "acr_sku" {
-  description = "SKU for the Azure Container Registry"
+  description = "ACR SKU"
   type        = string
   default     = "Standard"
 }
 
 variable "acr_admin_enabled" {
-  description = "Enable admin user for the ACR"
+  description = "Enable admin user for ACR"
   type        = bool
   default     = true
 }
 
+variable "app_service_plan_name" {
+  description = "App Service Plan name"
+  type        = string
+  default     = "team1-asp-auto"
+}
+
+variable "app_service_plan_sku" {
+  description = "App Service Plan SKU (B1/S1/P1v3 ...)"
+  type        = string
+  default     = "B1"
+}
+
+variable "app_service_name" {
+  description = "Linux Web App name"
+  type        = string
+  default     = "team1-webapp-auto"
+}
+
+variable "enable_staging_slot" {
+  description = "Create staging slot?"
+  type        = bool
+  default     = true
+}

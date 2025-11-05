@@ -2,60 +2,80 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~>3.0"
+      version = "~> 3.0"
     }
+  }
+
+  backend "azurerm" {
+    resource_group_name  = "team1tfstate-rg"
+    storage_account_name = "team1tfstateacct"
+    container_name       = "tfstate"
+    key                  = "team1/infra.tfstate"
   }
 }
 
+# Auth: ARM_* env değişkenleri (CI’de secrets) ile gelir
 provider "azurerm" {
   features {}
-  subscription_id = var.subscription_id
-  client_id       = var.client_id
-  client_secret   = var.client_secret
-  tenant_id       = var.tenant_id
 }
 
-resource "azurerm_resource_group" "rg-registry" {
+# ---------- Resources ----------
+
+# Resource Group
+resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
-  location = var.resource_group_location
+  location = var.location
 
   lifecycle {
     prevent_destroy = true
-    ignore_changes = []
+    ignore_changes  = []
   }
 }
 
+# App Service Plan (Linux)
 resource "azurerm_service_plan" "asp" {
-  name                = "asp432"
-  location            = azurerm_resource_group.rg-registry.location
-  resource_group_name = azurerm_resource_group.rg-registry.name
-  sku_name            = "S1"
+  name                = var.app_service_plan_name
+  location            = azurerm_resource_group.rg.location
+  resource_group_name = azurerm_resource_group.rg.name
+  sku_name            = var.app_service_plan_sku
   os_type             = "Linux"
-} 
+}
 
-resource "azurerm_container_registry" "rcteamdev" {
+# Azure Container Registry
+resource "azurerm_container_registry" "acr" {
   name                = var.acr_name
-  resource_group_name = azurerm_resource_group.rg-registry.name
-  location            = azurerm_resource_group.rg-registry.location
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
   sku                 = var.acr_sku
   admin_enabled       = var.acr_admin_enabled
 }
 
-resource "azurerm_linux_web_app" "as" {
-  name                = "ass23847"
-  resource_group_name = azurerm_resource_group.rg-registry.name
-  location            = azurerm_resource_group.rg-registry.location
+# Linux Web App (SystemAssigned Managed Identity)
+resource "azurerm_linux_web_app" "app" {
+  name                = var.app_service_name
+  resource_group_name = azurerm_resource_group.rg.name
+  location            = azurerm_resource_group.rg.location
   service_plan_id     = azurerm_service_plan.asp.id
+
+  identity { type = "SystemAssigned" }
+
+  site_config {
+    # Docker compose deploy'u workflow'da az cli ile yapılacak.
+  }
+}
+
+# (Opsiyonel) Staging slot (flag ile kontrol)
+resource "azurerm_linux_web_app_slot" "slot" {
+  count          = var.enable_staging_slot ? 1 : 0
+  name           = "staging"
+  app_service_id = azurerm_linux_web_app.app.id
 
   site_config {}
 }
 
-
-resource "azurerm_app_service_slot" "slot1" {
-  name                = "slot1"
-  app_service_name    = azurerm_linux_web_app.as.name
-  location            = azurerm_resource_group.rg-registry.location
-  resource_group_name = azurerm_resource_group.rg-registry.name
-  app_service_plan_id = azurerm_service_plan.asp.id
-
-} 
+# Web App MI -> ACR Pull yetkisi
+resource "azurerm_role_assignment" "acr_pull_for_app" {
+  scope                = azurerm_container_registry.acr.id
+  role_definition_name = "AcrPull"
+  principal_id         = azurerm_linux_web_app.app.identity[0].principal_id
+}
