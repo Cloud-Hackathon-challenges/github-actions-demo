@@ -65,15 +65,3 @@ resource "azurerm_linux_web_app" "app" {
   }
 }
 
-/* NOT: B1 SKU'da slot desteklenmez → slot kaynağını kaldırdık.
-resource "azurerm_linux_web_app_slot" "slot" { ... }
-*/
-
-# NOT: RBAC ile AcrPull 403 veriyordu; ACR admin cred ile ilerliyoruz.
-/*
-resource "azurerm_role_assignment" "acr_pull_for_app" {
-  scope                = azurerm_container_registry.acr.id
-  role_definition_name = "AcrPull"
-  principal_id         = azurerm_linux_web_app.app.identity[0].principal_id
-}
-*/
