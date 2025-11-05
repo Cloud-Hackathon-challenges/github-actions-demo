@@ -22,7 +22,7 @@ variable "tenant_id" {
 variable "location" {
   description = "Azure location/region"
   type        = string
-  default     = "westeurope"
+  default     = "northeurope"
 }
 
 variable "resource_group_name" {
