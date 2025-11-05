@@ -1,56 +1,51 @@
 variable "subscription_id" {
-  type        = string
   description = "Azure Subscription ID"
-}
-variable "client_id" {
   type        = string
-  description = "Azure AD application (client) ID"
-}
-variable "client_secret" {
-  type        = string
-  sensitive   = true
-  description = "Azure AD application client secret"
-}
-variable "tenant_id" {
-  type        = string
-  description = "Azure AD tenant ID"
 }
 
-variable "location" {
+variable "client_id" {
+  description = "Azure Client ID"
   type        = string
-  description = "Azure region (e.g., westeurope, northeurope)"
-  default     = "westeurope"
+}
+
+variable "client_secret" {
+  description = "Azure Client Secret"
+  type        = string
+  sensitive   = true
+}
+
+variable "tenant_id" {
+  description = "Azure Tenant ID"
+  type        = string
 }
 
 variable "resource_group_name" {
+  description = "Name of the resource group"
   type        = string
-  description = "Resource Group name to create/use"
+  default     = "team1-rg-manual6"
+}
+
+variable "resource_group_location" {
+  description = "Location for the resource group"
+  type        = string
+  default     = "northeurope"
 }
 
 variable "acr_name" {
+  description = "Name of the Azure Container Registry"
   type        = string
-  description = "Azure Container Registry name to create"
+  default     = "team1acrmanual6"
 }
 
-variable "app_service_plan_name" {
+variable "acr_sku" {
+  description = "SKU for the Azure Container Registry"
   type        = string
-  description = "App Service Plan name to create one"
+  default     = "Standard"
 }
 
-variable "app_service_plan_sku" {
-  type        = string
-  description = "App Service Plan SKU (e.g., B1, P1v3)"
-  default     = "B1"
-}
-
-variable "app_service_name" {
-  type        = string
-  description = "Linux Web App name to create"
-}
-
-# Optional: create staging slot
-variable "enable_staging_slot" {
+variable "acr_admin_enabled" {
+  description = "Enable admin user for the ACR"
   type        = bool
-  description = "Create a 'staging' slot"
   default     = true
 }
+
