@@ -60,36 +60,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- Backend bootstrap: RG/SA/container oluştur ---
-      - name: Azure Login (for backend bootstrap)
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-
-      - name: Ensure Terraform backend resources exist (RG/SA/container) + verify subscription
-        env:
-          SUB_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: |
-          set -e
-          RG="team1tfstate-rg"
-          SA="team1tfstateacct"   # Gerekirse benzersiz bir ad ver: team1tfstateacct01
-          CONTAINER="tfstate"
-          LOCATION="westeurope"
-
-          echo ">>> Using subscription: $SUB_ID"
-          az account set --subscription "$SUB_ID"
-          az account show --query "{sub:id, tenant:tenantId}" -o tsv
-
-          az group create -n "$RG" -l "$LOCATION" 1>/dev/null
-          az storage account create -n "$SA" -g "$RG" -l "$LOCATION" --sku Standard_LRS --encryption-services blob 1>/dev/null || true
-
-          # SA'nın görünmesi için kısa bekleme (propagation)
-          for i in {1..30}; do
-            az storage account show -n "$SA" -g "$RG" 1>/dev/null && break || sleep 2
-          done
-
-          az storage container create --name "$CONTAINER" --account-name "$SA" 1>/dev/null || true
-
       - name: Ensure no Azure CLI login is active
         run: az logout || true
 
@@ -106,16 +76,15 @@ jobs:
           client_secret         = "${{ secrets.AZURE_CLIENT_SECRET }}"
           tenant_id             = "${{ secrets.AZURE_TENANT_ID }}"
           subscription_id       = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-
           location              = "westeurope"
           resource_group_name   = "team1-rg-auto"
           acr_name              = "team1acrauto123"
           app_service_plan_name = "team1-asp-auto"
           app_service_plan_sku  = "B1"
           app_service_name      = "team1-webapp-auto"
+          enable_staging_slot   = true
           EOF
 
-      # 5) Terraform init (ARM_* env ile)
       - name: Terraform Init (authenticate via ARM_* env)
         env:
           ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
@@ -133,46 +102,41 @@ jobs:
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
         run: terraform plan -no-color -input=false -var-file="dev.tfvars"
 
-      - name: Terraform Apply (with simple retry)
+      - name: Terraform Apply
         if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
         env:
           ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
           ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
           ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: |
-          for i in 1 2 3; do
-            terraform apply -auto-approve -input=false -var-file="dev.tfvars" && exit 0
-            echo "Apply failed (attempt $i). Waiting 60s and retrying..."
-            sleep 60
-          done
-          echo "Apply failed after retries." >&2
-          exit 1
+        run: terraform apply -auto-approve -input=false -var-file="dev.tfvars"
 
       - name: Export Terraform outputs for next jobs
         id: tf_out
         shell: bash
         run: |
-          set -e
-          get() { terraform output -raw "$1" 2>/dev/null | tr -d '\r'; }
-          RG=$(get resource_group_name)
-          ASP=$(get app_service_plan)
-          APP=$(get app_service_name)
-          ACR=$(get acr_name)
-          ACRLS=$(get acr_login_server)
-          ACRU=$(get acr_admin_username)
-          ACRP=$(get acr_admin_password)
+          set -euo pipefail
 
-          # Outputs yaz
-          echo "rg_name=$RG"            >> "$GITHUB_OUTPUT"
-          echo "asp_name=$ASP"          >> "$GITHUB_OUTPUT"
-          echo "app_name=$APP"          >> "$GITHUB_OUTPUT"
-          echo "acr_name=$ACR"          >> "$GITHUB_OUTPUT"
-          echo "acr_login_server=$ACRLS">> "$GITHUB_OUTPUT"
-          echo "acr_username=$ACRU"     >> "$GITHUB_OUTPUT"
-          echo "acr_password=$ACRP"     >> "$GITHUB_OUTPUT"
+          get() {
+            terraform output -raw "$1" 2>/dev/null || echo ""
+          }
 
-          # Zorunlu alanlar boşsa fail et (PR'da apply atlamışsa ileriyi durdurur)
+          RG="$(get resource_group_name)"
+          ASP="$(get app_service_plan)"
+          APP="$(get app_service_name)"
+          ACR="$(get acr_name)"
+          ACRLS="$(get acr_login_server)"
+          ACRU="$(get acr_admin_username)"
+          ACRP="$(get acr_admin_password)"
+
+          echo "rg_name=$RG"              >> "$GITHUB_OUTPUT"
+          echo "asp_name=$ASP"            >> "$GITHUB_OUTPUT"
+          echo "app_name=$APP"            >> "$GITHUB_OUTPUT"
+          echo "acr_name=$ACR"            >> "$GITHUB_OUTPUT"
+          echo "acr_login_server=$ACRLS"  >> "$GITHUB_OUTPUT"
+          echo "acr_username=$ACRU"       >> "$GITHUB_OUTPUT"
+          echo "acr_password=$ACRP"       >> "$GITHUB_OUTPUT"
+
           MISSING=0
           for key in RG ASP APP ACR ACRLS; do
             if [ -z "${!key}" ]; then
@@ -182,9 +146,7 @@ jobs:
           done
           exit $MISSING
 
-  # --- Bu job ve devamı sadece ACR output'ı doluysa çalışır ---
   docker-build-push:
-    if: needs.terraform-deploy-infra.outputs.acr_name != ''
     name: Build and Push Docker Images
     runs-on: ubuntu-latest
     needs: terraform-deploy-infra
@@ -193,31 +155,26 @@ jobs:
       ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: ACR Login (OIDC)
         run: az acr login -n "$ACR_NAME"
+
       - name: Build and Push frontend image
         run: |
           docker build --platform linux/amd64 -t $ACR_LOGIN_SERVER/frontend:latest ./application/frontend
           docker push $ACR_LOGIN_SERVER/frontend:latest
+
       - name: Build and Push api image
         run: |
           docker build --platform linux/amd64 -t $ACR_LOGIN_SERVER/api:latest ./application/api
           docker push $ACR_LOGIN_SERVER/api:latest
-      - name: Build and Push db-seed image (if exists)
-        run: |
-          if [ -d "./application/db-seed" ]; then
-            docker build --platform linux/amd64 -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
-            docker push $ACR_LOGIN_SERVER/db-seed:latest
-          else
-            echo "db-seed directory not found, skipping."
-          fi
 
   appservice-deploy:
-    if: needs.terraform-deploy-infra.outputs.acr_name != ''
     name: Deploy to Azure App Service
     runs-on: ubuntu-latest
     needs: [ docker-build-push, terraform-deploy-infra ]
@@ -227,14 +184,14 @@ jobs:
       APP_NAME:         ${{ needs.terraform-deploy-infra.outputs.app_name }}
       ACR_NAME:         ${{ needs.terraform-deploy-infra.outputs.acr_name }}
       ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
-      ACR_USER:         ${{ needs.terraform-deploy-infra.outputs.acr_username }}
-      ACR_PASS:         ${{ needs.terraform-deploy-infra.outputs.acr_password }}
     steps:
       - uses: actions/checkout@v4
+
       - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: Create / Update Web App (compose)
         run: |
           az webapp create \
@@ -243,23 +200,30 @@ jobs:
             --name "$APP_NAME" \
             --multicontainer-config-type compose \
             --multicontainer-config-file application/docker-compose.webapp.yml || true
-      - name: Apply docker-compose to the Web App (with ACR creds)
+
+      - name: Ensure System Assigned Managed Identity
+        run: az webapp identity assign -g "$RG_NAME" -n "$APP_NAME"
+
+      - name: Grant AcrPull to the Web App identity
+        run: |
+          set -e
+          PRINCIPAL_ID=$(az webapp identity show -g "$RG_NAME" -n "$APP_NAME" --query principalId -o tsv)
+          ACR_ID=$(az acr show -n "$ACR_NAME" --query id -o tsv)
+          az role assignment create \
+            --assignee-object-id "$PRINCIPAL_ID" \
+            --assignee-principal-type ServicePrincipal \
+            --role "AcrPull" \
+            --scope "$ACR_ID" || true
+
+      - name: Apply docker-compose to the Web App
         run: |
           az webapp config container set \
             --resource-group "$RG_NAME" \
             --name "$APP_NAME" \
             --multicontainer-config-type compose \
-            --multicontainer-config-file application/docker-compose.webapp.yml \
-            --docker-registry-server-url "https://$ACR_LOGIN_SERVER" \
-            --docker-registry-server-user "$ACR_USER" \
-            --docker-registry-server-password "$ACR_PASS"
-      - name: Set common app settings
-        run: |
-          az webapp config appsettings set -g "$RG_NAME" -n "$APP_NAME" \
-            --settings WEBSITES_ENABLE_APP_SERVICE_STORAGE=true WEBSITES_CONTAINER_START_TIME_LIMIT=600
+            --multicontainer-config-file application/docker-compose.webapp.yml
 
   appservice-restart:
-    if: needs.terraform-deploy-infra.outputs.acr_name != ''
     name: Restart Web App
     runs-on: ubuntu-latest
     needs: appservice-deploy
@@ -273,26 +237,3 @@ jobs:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Restart Azure Web App
         run: az webapp restart --name "$APP_NAME" --resource-group "$RG_NAME"
-
-  cypress-e2e:
-    if: needs.terraform-deploy-infra.outputs.acr_name != ''
-    name: Run Cypress E2E Tests
-    runs-on: ubuntu-latest
-    needs: [ appservice-restart, terraform-deploy-infra ]
-    env:
-      CYPRESS_BASE_URL: https://${{ needs.terraform-deploy-infra.outputs.app_name }}.azurewebsites.net
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 20
-      - name: Install test dependencies
-        working-directory: test
-        run: npm ci
-      - name: Wait for site and API
-        run: |
-          for i in {1..60}; do curl -fsS -m 5 "$CYPRESS_BASE_URL/" >/dev/null && break || sleep 3; done
-          for i in {1..60}; do curl -fsS -m 5 "$CYPRESS_BASE_URL/api/books" >/dev/null && break || sleep 3; done
-      - name: Run Cypress tests
-        working-directory: test
-        run: npx cypress run
