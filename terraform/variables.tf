@@ -19,50 +19,32 @@ variable "tenant_id" {
   type        = string
 }
 
-variable "location" {
-  description = "Azure location/region"
+variable "resource_group_name" {
+  description = "Name of the resource group"
   type        = string
-  default     = "westeurope"
+  default     = "team1-rg-manual9"
 }
 
-variable "resource_group_name" {
-  description = "Resource Group name"
+variable "resource_group_location" {
+  description = "Location for the resource group"
   type        = string
-  default     = "team1-rg-auto"
+  default     = "northeurope"
 }
 
 variable "acr_name" {
-  description = "Azure Container Registry name"
+  description = "Name of the Azure Container Registry"
   type        = string
-  default     = "team1acrauto123"
+  default     = "team1acrmanual9"
 }
 
 variable "acr_sku" {
-  description = "ACR SKU"
+  description = "SKU for the Azure Container Registry"
   type        = string
   default     = "Standard"
 }
 
 variable "acr_admin_enabled" {
-  description = "Enable admin user for ACR"
+  description = "Enable admin user for the ACR"
   type        = bool
   default     = true
-}
-
-variable "app_service_plan_name" {
-  description = "App Service Plan name"
-  type        = string
-  default     = "team1-asp-auto"
-}
-
-variable "app_service_plan_sku" {
-  description = "App Service Plan SKU (B1/S1/P1v3 ...)"
-  type        = string
-  default     = "B1"
-}
-
-variable "app_service_name" {
-  description = "Linux Web App name1"
-  type        = string
-  default     = "team1-webapp-auto"
 }
