@@ -62,7 +62,7 @@ variable "app_service_plan_sku" {
 }
 
 variable "app_service_name" {
-  description = "Linux Web App name"
+  description = "Linux Web App name1"
   type        = string
   default     = "team1-webapp-auto"
 }
