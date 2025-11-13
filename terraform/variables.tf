@@ -35,6 +35,11 @@ variable "app_service_plan_name" {
   default = "team1-asp-auto"
 }
 
+variable "app_service_plan_sku" {
+  type    = string
+  default = "B1"
+}
+
 variable "app_service_name" {
   type    = string
   default = "team1-webapp-auto"

@@ -15,11 +15,17 @@ provider "azurerm" {
   tenant_id       = var.tenant_id
 }
 
+# -------------------------
+# Resource Group
+# -------------------------
 resource "azurerm_resource_group" "rg" {
   name     = var.resource_group_name
   location = var.location
 }
 
+# -------------------------
+# Azure Container Registry
+# -------------------------
 resource "azurerm_container_registry" "acr" {
   name                = var.acr_name
   resource_group_name = azurerm_resource_group.rg.name
@@ -28,14 +34,20 @@ resource "azurerm_container_registry" "acr" {
   admin_enabled       = true
 }
 
+# -------------------------
+# App Service Plan
+# -------------------------
 resource "azurerm_service_plan" "asp" {
   name                = var.app_service_plan_name
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
-  sku_name            = "B1"
+  sku_name            = var.app_service_plan_sku
   os_type             = "Linux"
 }
 
+# -------------------------
+# Linux Web App
+# -------------------------
 resource "azurerm_linux_web_app" "app" {
   name                = var.app_service_name
   resource_group_name = azurerm_resource_group.rg.name
@@ -43,24 +55,4 @@ resource "azurerm_linux_web_app" "app" {
   service_plan_id     = azurerm_service_plan.asp.id
 
   site_config {}
-}
-
-output "resource_group_name" {
-  value = azurerm_resource_group.rg.name
-}
-
-output "app_service_plan" {
-  value = azurerm_service_plan.asp.name
-}
-
-output "app_service_name" {
-  value = azurerm_linux_web_app.app.name
-}
-
-output "acr_name" {
-  value = azurerm_container_registry.acr.name
-}
-
-output "acr_login_server" {
-  value = azurerm_container_registry.acr.login_server
 }
