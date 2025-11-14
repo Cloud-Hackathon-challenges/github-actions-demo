@@ -2,13 +2,14 @@ terraform {
   required_providers {
     azurerm = {
       source  = "hashicorp/azurerm"
-      version = "~>3.0"
+      version = "~> 3.0"
     }
   }
 }
 
 provider "azurerm" {
   features {}
+
   subscription_id = var.subscription_id
   client_id       = var.client_id
   client_secret   = var.client_secret
@@ -30,8 +31,13 @@ resource "azurerm_container_registry" "acr" {
   name                = var.acr_name
   resource_group_name = azurerm_resource_group.rg.name
   location            = azurerm_resource_group.rg.location
-  sku                 = "Standard"
-  admin_enabled       = true
+
+  # Basic da olur, Standard da olur; senin eskisi Standard idi
+  sku           = "Standard"
+
+  # ÖNEMLİ: admin_enabled = false
+  # Aksi halde listCredentials çağrısında 404 alıyorsun
+  admin_enabled = false
 }
 
 # -------------------------
@@ -41,8 +47,9 @@ resource "azurerm_service_plan" "asp" {
   name                = var.app_service_plan_name
   location            = azurerm_resource_group.rg.location
   resource_group_name = azurerm_resource_group.rg.name
-  sku_name            = var.app_service_plan_sku
-  os_type             = "Linux"
+
+  sku_name = var.app_service_plan_sku
+  os_type  = "Linux"
 }
 
 # -------------------------
@@ -54,5 +61,7 @@ resource "azurerm_linux_web_app" "app" {
   location            = azurerm_resource_group.rg.location
   service_plan_id     = azurerm_service_plan.asp.id
 
+  # Container config'i GitHub Actions ile
+  # `az webapp config container set` ile dışarıdan veriyorsun.
   site_config {}
 }

@@ -22,7 +22,9 @@ variable "resource_group_name" {
 
 variable "location" {
   type    = string
-  default = "westeurope"
+  # Workflow'ta dev.tfvars ile zaten "northeurope" geçiyorsun,
+  # ama default'u da uyumlu yapalım:
+  default = "northeurope"
 }
 
 variable "acr_name" {
@@ -44,8 +46,3 @@ variable "app_service_name" {
   type    = string
   default = "team1-webapp-auto"
 }
-
-# variable "app_service_name" {
-#   type    = string
-#   default = "team1-webapp-auto"
-# }
