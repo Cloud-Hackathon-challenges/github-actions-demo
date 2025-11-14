@@ -172,7 +172,7 @@ jobs:
 
   ##############################################
   # 4. APPSERVICE DEPLOY
-  ##############################################
+  ###############################################
   appservice-deploy:
     name: Deploy to Azure App Service
     runs-on: ubuntu-latest
