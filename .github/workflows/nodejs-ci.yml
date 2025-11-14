@@ -85,7 +85,7 @@ jobs:
           client_secret         = "${{ secrets.AZURE_CLIENT_SECRET }}"
           tenant_id             = "${{ secrets.AZURE_TENANT_ID }}"
           subscription_id       = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          location              = "westeurope"
+          location              = "northeurope"
           resource_group_name   = "team1-rg-auto"
           acr_name              = "team1acrauto123"
           app_service_plan_name = "team1-asp-auto"
