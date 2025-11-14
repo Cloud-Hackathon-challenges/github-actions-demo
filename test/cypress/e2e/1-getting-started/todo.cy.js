@@ -1,7 +1,11 @@
+// test/cypress/e2e/1-getting-started/todo.cy.js  (veya nereye koyduysan)
 describe('status-toggle', () => {
   it('toggles the status text in the same row when clicking BORROW/RETURN', () => {
     // 1️⃣ Open root (auto-redirects to /books)
-    cy.visit('https://ass238471.azurewebsites.net/');
+    // ❌ ESKİ: cy.visit('https://ass238471.azurewebsites.net/');
+    // ✅ YENİ: sadece relatif path
+    cy.visit('/');
+
     cy.location('pathname', { timeout: 10000 }).should('match', /\/books$/);
 
     // 2️⃣ Grab the first visible BORROW/RETURN button
@@ -17,13 +21,12 @@ describe('status-toggle', () => {
         const $row = $btn.closest('tr');
 
         // 5️⃣ Within the same row, capture the current status text
-        //    We accept common variants: German/English.
         const statusRegex = /(Verfügbar|Ausgeliehen|Available|Borrowed|Loaned)/i;
 
         let beforeStatusText = '';
         cy.wrap($row).invoke('text').then((txt) => {
           const match = String(txt).match(statusRegex);
-          beforeStatusText = match ? match[0] : ''; // may be empty if UI differs
+          beforeStatusText = match ? match[0] : '';
         });
 
         // 6️⃣ Click the button to toggle state
@@ -42,8 +45,6 @@ describe('status-toggle', () => {
             const afterMatch = String(txtAfter).match(statusRegex);
             const afterStatusText = afterMatch ? afterMatch[0] : '';
 
-            // If we captured a before-status, ensure it toggled.
-            // If not captured (UI variant), at least ensure there IS a recognizable status now.
             if (beforeStatusText) {
               expect(afterStatusText, 'status text should toggle').to.not.equal(beforeStatusText);
             } else {

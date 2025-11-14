@@ -236,26 +236,42 @@ jobs:
 
 
   ##############################################
-  # 6. CYPRESS E2E
-  ##############################################
-  cypress-e2e:
-    name: Run Cypress E2E Tests
-    runs-on: ubuntu-latest
-    needs: [appservice-deploy, terraform-deploy-infra]
-    env:
-      APP_NAME: ${{ needs.terraform-deploy-infra.outputs.app_name }}
-    steps:
-      - uses: actions/checkout@v4
+# 6. CYPRESS E2E
+##############################################
+cypress-e2e:
+  name: Run Cypress E2E Tests
+  runs-on: ubuntu-latest
+  needs: [appservice-restart, terraform-deploy-infra]   # 🔁 restart’tan sonra
+  env:
+    CYPRESS_BASE_URL: "https://${{ needs.terraform-deploy-infra.outputs.app_name }}.azurewebsites.net"
+  steps:
+    - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v3
-        with:
-          node-version: 20
+    - uses: actions/setup-node@v3
+      with:
+        node-version: 20
 
-      - run: npm ci
-        working-directory: test
+    - name: Install test dependencies
+      run: npm ci
+      working-directory: test
 
-      - run: npx cypress run
-        working-directory: test
-        env:
-          CYPRESS_BASE_URL: "https://${APP_NAME}.azurewebsites.net"
-          TERM: xterm-256color
+    - name: Wait for app to be reachable
+      run: |
+        echo "Waiting for $CYPRESS_BASE_URL ..."
+        for i in {1..15}; do
+          if curl -sSf "$CYPRESS_BASE_URL" > /dev/null; then
+            echo "App is up ✅"
+            exit 0
+          fi
+          echo "Still not up, retrying..."
+          sleep 10
+        done
+        echo "App never became reachable ❌"
+        exit 1
+
+    - name: Run Cypress E2E
+      working-directory: test
+      env:
+        CYPRESS_BASE_URL: ${{ env.CYPRESS_BASE_URL }}
+        TERM: xterm-256color
+      run: npx cypress run
