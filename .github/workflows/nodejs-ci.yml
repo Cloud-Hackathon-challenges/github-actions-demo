@@ -48,9 +48,8 @@ jobs:
           echo "Linting API..."
           grep -rIn '[^;]$' . --include=*.js || echo "Lint check done"
 
-
   ##############################################
-  # 2. TERRAFORM DEPLOY (creates ACR + AppService + RG)
+  # 2. TERRAFORM DEPLOY
   ##############################################
   terraform-deploy-infra:
     name: Deploy Azure Infrastructure with Terraform
@@ -69,16 +68,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Ensure no Azure CLI login is active
-        run: az logout || true
-
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v2
         with:
           terraform_version: 1.5.7
           terraform_wrapper: false
 
-      - name: Create dev.tfvars from GitHub Secrets
+      - name: Create dev.tfvars from secrets
         run: |
           cat <<'EOF' > dev.tfvars
           client_id             = "${{ secrets.AZURE_CLIENT_ID }}"
@@ -99,7 +95,7 @@ jobs:
           ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
           ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: terraform init -input=false -no-color
+        run: terraform init -input=false
 
       - name: Terraform Plan
         id: plan
@@ -117,23 +113,20 @@ jobs:
           ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
           ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
           ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: terraform apply -auto-approve -input=false -var-file="dev.tfvars" -parallelism=1
+        run: terraform apply -auto-approve -input=false -var-file="dev.tfvars"
 
       - name: Export Terraform Outputs
         id: tf_out
-        shell: bash
         run: |
           get() { terraform output -raw "$1" 2>/dev/null || echo ""; }
-
-          echo "rg_name=$(get resource_group_name)"        >> $GITHUB_OUTPUT
-          echo "asp_name=$(get app_service_plan)"          >> $GITHUB_OUTPUT
-          echo "app_name=$(get app_service_name)"          >> $GITHUB_OUTPUT
-          echo "acr_name=$(get acr_name)"                  >> $GITHUB_OUTPUT
-          echo "acr_login_server=$(get acr_login_server)"  >> $GITHUB_OUTPUT
-
+          echo "rg_name=$(get resource_group_name)" >> $GITHUB_OUTPUT
+          echo "asp_name=$(get app_service_plan)" >> $GITHUB_OUTPUT
+          echo "app_name=$(get app_service_name)" >> $GITHUB_OUTPUT
+          echo "acr_name=$(get acr_name)" >> $GITHUB_OUTPUT
+          echo "acr_login_server=$(get acr_login_server)" >> $GITHUB_OUTPUT
 
   ##############################################
-  # 3. DOCKER BUILD + PUSH (only if ACR exists)
+  # 3. DOCKER BUILD + PUSH
   ##############################################
   docker-build-push:
     name: Build and Push Docker Images
@@ -151,38 +144,35 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: ACR Login (OIDC)
+      - name: ACR Login
         run: az acr login -n "$ACR_NAME"
 
       - name: Build + Push frontend
         run: |
-          docker build --platform linux/amd64 -t $ACR_LOGIN_SERVER/frontend:latest ./application/frontend
+          docker build -t $ACR_LOGIN_SERVER/frontend:latest ./application/frontend
           docker push $ACR_LOGIN_SERVER/frontend:latest
 
       - name: Build + Push api
         run: |
-          docker build --platform linux/amd64 -t $ACR_LOGIN_SERVER/api:latest ./application/api
+          docker build -t $ACR_LOGIN_SERVER/api:latest ./application/api
           docker push $ACR_LOGIN_SERVER/api:latest
 
       - name: Build + Push db-seed
         run: |
-          docker build --platform linux/amd64 -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
+          docker build -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
           docker push $ACR_LOGIN_SERVER/db-seed:latest
 
-
   ##############################################
-  # 4. APPSERVICE DEPLOY
-  ###############################################
+  # 4. DEPLOY TO APPSERVICE
+  ##############################################
   appservice-deploy:
     name: Deploy to Azure App Service
     runs-on: ubuntu-latest
     needs: [docker-build-push, terraform-deploy-infra]
-    if: needs.terraform-deploy-infra.outputs.acr_login_server != ''
     env:
-      RG_NAME:          ${{ needs.terraform-deploy-infra.outputs.rg_name }}
-      ASP_NAME:         ${{ needs.terraform-deploy-infra.outputs.asp_name }}
-      APP_NAME:         ${{ needs.terraform-deploy-infra.outputs.app_name }}
-      ACR_NAME:         ${{ needs.terraform-deploy-infra.outputs.acr_name }}
+      RG_NAME:    ${{ needs.terraform-deploy-infra.outputs.rg_name }}
+      APP_NAME:   ${{ needs.terraform-deploy-infra.outputs.app_name }}
+      ACR_NAME:   ${{ needs.terraform-deploy-infra.outputs.acr_name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -191,10 +181,10 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Enable Identity
+      - name: Enable Managed Identity
         run: az webapp identity assign -g "$RG_NAME" -n "$APP_NAME"
 
-      - name: Grant AcrPull
+      - name: Assign AcrPull Role
         run: |
           PRINCIPAL_ID=$(az webapp identity show -g "$RG_NAME" -n "$APP_NAME" --query principalId -o tsv)
           ACR_ID=$(az acr show -n "$ACR_NAME" --query id -o tsv)
@@ -202,9 +192,9 @@ jobs:
             --assignee-object-id "$PRINCIPAL_ID" \
             --assignee-principal-type ServicePrincipal \
             --role "AcrPull" \
-            --scope "$ACR_ID" || true
+            --scope "$ACR_ID" || echo "Role already exists"
 
-      - name: Apply docker-compose to App Service
+      - name: Apply docker-compose
         run: |
           az webapp config container set \
             --resource-group "$RG_NAME" \
@@ -212,9 +202,8 @@ jobs:
             --multicontainer-config-type compose \
             --multicontainer-config-file application/docker-compose.webapp.yml
 
-
   ##############################################
-  # 5. RESTART
+  # 5. RESTART APP
   ##############################################
   appservice-restart:
     name: Restart Azure Web App
@@ -228,14 +217,12 @@ jobs:
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Restart Azure Web App
-        run: |
-          echo "Restarting $APP_NAME in $RG_NAME"
-          az webapp restart --name "$APP_NAME" --resource-group "$RG_NAME"
 
+      - name: Restart App
+        run: az webapp restart --name "$APP_NAME" --resource-group "$RG_NAME"
 
   ##############################################
-  # 6. CYPRESS E2E
+  # 6. CYPRESS E2E TEST
   ##############################################
   cypress-e2e:
     name: Run Cypress E2E Tests
@@ -250,27 +237,25 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install test dependencies
+      - name: Install dependencies
         run: npm ci
         working-directory: test
 
       - name: Wait for app to be reachable
         run: |
-          echo "Waiting for $CYPRESS_BASE_URL ..."
           for i in {1..15}; do
             if curl -sSf "$CYPRESS_BASE_URL" > /dev/null; then
               echo "App is up ✅"
               exit 0
             fi
-            echo "Still not up, retrying..."
+            echo "Waiting..."
             sleep 10
           done
-          echo "App never became reachable ❌"
+          echo "App not reachable ❌"
           exit 1
 
-      - name: Run Cypress E2E
+      - name: Run Cypress Tests
         working-directory: test
         env:
           CYPRESS_BASE_URL: ${{ env.CYPRESS_BASE_URL }}
-          TERM: xterm-256color
         run: npx cypress run
