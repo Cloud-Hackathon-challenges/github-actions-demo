@@ -17,11 +17,14 @@ provider "azurerm" {
 }
 
 # -------------------------
-# Resource Group
+# Use Existing Resource Group
 # -------------------------
-resource "azurerm_resource_group" "rg" {
-  name     = var.resource_group_name
-  location = var.location
+variable "resource_group_name" {
+  type = string
+}
+
+data "azurerm_resource_group" "rg" {
+  name = var.resource_group_name
 }
 
 # -------------------------
@@ -29,14 +32,10 @@ resource "azurerm_resource_group" "rg" {
 # -------------------------
 resource "azurerm_container_registry" "acr" {
   name                = var.acr_name
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = data.azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg.location
 
-  # Basic da olur, Standard da olur; senin eskisi Standard idi
   sku           = "Standard"
-
-  # ÖNEMLİ: admin_enabled = false
-  # Aksi halde listCredentials çağrısında 404 alıyorsun
   admin_enabled = false
 }
 
@@ -45,8 +44,8 @@ resource "azurerm_container_registry" "acr" {
 # -------------------------
 resource "azurerm_service_plan" "asp" {
   name                = var.app_service_plan_name
-  location            = azurerm_resource_group.rg.location
-  resource_group_name = azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg.location
+  resource_group_name = data.azurerm_resource_group.rg.name
 
   sku_name = var.app_service_plan_sku
   os_type  = "Linux"
@@ -57,11 +56,9 @@ resource "azurerm_service_plan" "asp" {
 # -------------------------
 resource "azurerm_linux_web_app" "app" {
   name                = var.app_service_name
-  resource_group_name = azurerm_resource_group.rg.name
-  location            = azurerm_resource_group.rg.location
+  resource_group_name = data.azurerm_resource_group.rg.name
+  location            = data.azurerm_resource_group.rg.location
   service_plan_id     = azurerm_service_plan.asp.id
 
-  # Container config'i GitHub Actions ile
-  # `az webapp config container set` ile dışarıdan veriyorsun.1
   site_config {}
 }
