@@ -55,5 +55,5 @@ resource "azurerm_linux_web_app" "app" {
   location            = azurerm_resource_group.rg.location
   service_plan_id     = azurerm_service_plan.asp.id
 
-  site_config {} # Docker compose config dışarıdan veriliyor
+  site_config {} # Docker compose config dışarıdan veriliyor.
 }
