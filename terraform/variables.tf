@@ -22,8 +22,6 @@ variable "resource_group_name" {
 
 variable "location" {
   type    = string
-  # Workflow'ta dev.tfvars ile zaten "northeurope" geçiyorsun,
-  # ama default'u da uyumlu yapalım:
   default = "northeurope"
 }
 
