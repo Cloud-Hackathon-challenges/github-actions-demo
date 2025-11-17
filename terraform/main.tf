@@ -62,6 +62,6 @@ resource "azurerm_linux_web_app" "app" {
   service_plan_id     = azurerm_service_plan.asp.id
 
   # Container config'i GitHub Actions ile
-  # `az webapp config container set` ile dışarıdan veriyorsun.
+  # `az webapp config container set` ile dışarıdan veriyorsun.1
   site_config {}
 }
