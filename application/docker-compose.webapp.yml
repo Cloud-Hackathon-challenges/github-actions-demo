@@ -5,38 +5,44 @@ services:
     image: mongo:6-jammy
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.runCommand({ ping: 1 }).ok\" || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 120
 
   api:
-    image: team1acrauto123.azurecr.io/api:latest   # 🔁 BURASI
+    image: team1acrauto123.azurecr.io/api:latest
     environment:
       PORT: "4000"
       MONGO_URI: "mongodb://mongodb:27017/dobook"
     depends_on:
       - mongodb
-    command: ["node","server.js"]
+    command: ["node", "server.js"]
     restart: always
 
   mongo-seed:
-    image: team1acrauto123.azurecr.io/db-seed:latest  # 🔁 BURASI
+    image: team1acrauto123.azurecr.io/db-seed:latest
     environment:
       MONGO_URI: "mongodb://mongodb:27017/dobook"
     depends_on:
       - mongodb
     command: >
-      sh -lc "echo 'waiting for mongo...';
+      sh -lc "echo waiting for mongo...;
       for i in $(seq 1 180); do
-        mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok' && break || sleep 2;
+        if mongosh --host mongodb:27017 --quiet --eval \"db.runCommand({ ping: 1 }).ok\"; then
+          echo mongo is up;
+          break;
+        fi;
+        echo still waiting for mongo...;
+        sleep 2;
       done;
+      echo running seed...;
       node seed.js;
-      echo 'seed done'"
+      echo seed done"
     restart: "no"
 
   frontend:
-    image: team1acrauto123.azurecr.io/frontend:latest  # 🔁 BURASI
+    image: team1acrauto123.azurecr.io/frontend:latest
     depends_on:
       - api
     restart: always
@@ -49,7 +55,7 @@ services:
     ports:
       - "80:80"
     command: >
-      sh -lc "cat > /etc/nginx/nginx.conf <<'EOF'
+      sh -lc "cat >/etc/nginx/nginx.conf <<EOF
       worker_processes  1;
       events { worker_connections 1024; }
       http {
