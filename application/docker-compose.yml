@@ -4,50 +4,60 @@ services:
   mongodb:
     image: mongo:6-jammy
     restart: always
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo-data:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.runCommand({ ping: 1 }).ok\" || exit 1"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1"]
       interval: 5s
       timeout: 5s
-      retries: 20
+      retries: 60
 
   api:
-    build:
-      context: ./api
+    image: team1acrauto123.azurecr.io/api:latest
     environment:
-      PORT: 4000
-      MONGO_URI: mongodb://mongodb:27017/dobook   # DB adı 'dobook'
+      PORT: "4000"
+      MONGO_URI: "mongodb://mongodb:27017/dobook"
+      MONGO_URL: "mongodb://mongodb:27017/dobook"
     depends_on:
-      mongodb:
-        condition: service_healthy
-    ports:
-      - "4000:4000"
-    command: ["node", "server.js"]   # entrypoint yok, doğrudan node
+      - mongodb
+    command: ["node", "server.js"]
+    restart: always
 
   mongo-seed:
-    build:
-      context: ./db-seed
-      args:
-        HOST: mongodb
-        PORT: 27017
+    image: team1acrauto123.azurecr.io/db-seed:latest
+    environment:
+      MONGO_URI: "mongodb://mongodb:27017/dobook"
     depends_on:
-      mongodb:
-        condition: service_healthy
+      - mongodb
+    command:
+      - sh
+      - -lc
+      - |
+        echo "waiting for mongo...";
+        for i in $(seq 1 180); do
+          if mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok'; then
+            echo "mongo is up";
+            break;
+          fi;
+          echo "still waiting for mongo...";
+          sleep 2;
+        done;
+        echo "running seed...";
+        node seed.js;
+        echo "seed done";
     restart: "no"
 
   frontend:
-    build:
-      context: ./frontend
-    environment:
-      API_HOST: api
-      API_PORT: 4000
+    image: team1acrauto123.azurecr.io/frontend:latest
     depends_on:
       - api
-    ports:
-      - "8080:80"   # rootless podman için host portu
+    restart: always
 
-volumes:
-  mongo-data:
+  edge:
+    image: nginx:alpine
+    depends_on:
+      - api
+      - frontend
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    restart: always

@@ -4,41 +4,53 @@ services:
   mongodb:
     image: mongo:6-jammy
     restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.runCommand({ ping: 1 }).ok\" || exit 1"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || exit 1"]
       interval: 5s
       timeout: 5s
-      retries: 120
+      retries: 60
 
   api:
     image: team1acrauto123.azurecr.io/api:latest
     environment:
       PORT: "4000"
       MONGO_URI: "mongodb://mongodb:27017/dobook"
+      MONGO_URL: "mongodb://mongodb:27017/dobook"
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     command: ["node", "server.js"]
     restart: always
+    ports:
+      - "4000:4000"
 
   mongo-seed:
     image: team1acrauto123.azurecr.io/db-seed:latest
     environment:
       MONGO_URI: "mongodb://mongodb:27017/dobook"
     depends_on:
-      - mongodb
-    command: >
-      sh -lc "echo waiting for mongo...;
-      for i in $(seq 1 180); do
-        if mongosh --host mongodb:27017 --quiet --eval \"db.runCommand({ ping: 1 }).ok\"; then
-          echo mongo is up;
-          break;
-        fi;
-        echo still waiting for mongo...;
-        sleep 2;
-      done;
-      echo running seed...;
-      node seed.js;
-      echo seed done"
+      mongodb:
+        condition: service_healthy
+    command:
+      - sh
+      - -lc
+      - |
+        echo "waiting for mongo...";
+        for i in $(seq 1 180); do
+          if mongosh --host mongodb:27017 --quiet --eval 'db.runCommand({ ping: 1 }).ok'; then
+            echo "mongo is up";
+            break;
+          fi;
+          echo "still waiting for mongo...";
+          sleep 2;
+        done;
+        echo "running seed...";
+        node seed.js;
+        echo "seed done";
     restart: "no"
 
   frontend:
@@ -46,6 +58,8 @@ services:
     depends_on:
       - api
     restart: always
+    ports:
+      - "8080:80"
 
   edge:
     image: nginx:alpine
@@ -54,31 +68,9 @@ services:
       - frontend
     ports:
       - "80:80"
-    command: >
-      sh -lc "cat >/etc/nginx/nginx.conf <<EOF
-      worker_processes  1;
-      events { worker_connections 1024; }
-      http {
-        include       mime.types;
-        sendfile      on;
-        server {
-          listen 80;
-
-          location / {
-            proxy_pass http://frontend:80;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_http_version 1.1;
-          }
-
-          location /api/ {
-            proxy_pass http://api:4000/;
-            proxy_set_header Host \$host;
-            proxy_set_header X-Real-IP \$remote_addr;
-            proxy_http_version 1.1;
-          }
-        }
-      }
-      EOF
-      nginx -g 'daemon off;'"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
     restart: always
+
+volumes:
+  mongo-data:
