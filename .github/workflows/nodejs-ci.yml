@@ -1,164 +1,56 @@
-name: Full CI/CD with Terraform, ACR, Docker & App Service
+name: Full CI/CD - Build & Deploy Multi-Container to Azure App Service
 
 on:
   push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+    branches:
+      - main
 
 jobs:
-
-  test:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        node-version: [20]
-        project: [frontend, api]
-    defaults:
-      run:
-        working-directory: application/${{ matrix.project }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v3
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: npm
-          cache-dependency-path: application/${{ matrix.project }}/package-lock.json
-      - name: Install dependencies
-        run: npm ci
-      - name: Run tests (non-blocking)
-        run: npm test
-        continue-on-error: true
-      - name: Security audit (non-blocking)
-        run: npm audit
-        continue-on-error: true
-      - name: Lint API only
-        if: matrix.project == 'api'
-        run: |
-          echo "Linting API..."
-          grep -rIn '[^;]$' . --include=*.js || echo "Lint check done"
 
-  terraform-deploy-infra:
-    runs-on: ubuntu-latest
-    needs: test
-    defaults:
-      run:
-        working-directory: ./terraform
-    outputs:
-      rg_name:            ${{ steps.tf_out.outputs.rg_name }}
-      asp_name:           ${{ steps.tf_out.outputs.asp_name }}
-      app_name:           ${{ steps.tf_out.outputs.app_name }}
-      acr_name:           ${{ steps.tf_out.outputs.acr_name }}
-      acr_login_server:   ${{ steps.tf_out.outputs.acr_login_server }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v2
-        with:
-          terraform_version: 1.5.7
-          terraform_wrapper: false
-      - name: Create dev.tfvars
-        run: |
-          cat <<EOF > dev.tfvars
-          client_id             = "${{ secrets.AZURE_CLIENT_ID }}"
-          client_secret         = "${{ secrets.AZURE_CLIENT_SECRET }}"
-          tenant_id             = "${{ secrets.AZURE_TENANT_ID }}"
-          subscription_id       = "${{ secrets.AZURE_SUBSCRIPTION_ID }}"
-          location              = "northeurope"
-          resource_group_name   = "team1-rg-auto"
-          acr_name              = "team1acrauto123"
-          app_service_plan_name = "team1-asp-auto"
-          app_service_plan_sku  = "B1"
-          app_service_name      = "team1-webapp-auto"
-          EOF
-      - name: Terraform Init
-        env:
-          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: terraform init -input=false
-      - name: Terraform Plan
-        id: plan
-        env:
-          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: terraform plan -no-color -input=false -var-file="dev.tfvars"
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && steps.plan.outcome == 'success'
-        env:
-          ARM_CLIENT_ID:       ${{ secrets.AZURE_CLIENT_ID }}
-          ARM_CLIENT_SECRET:   ${{ secrets.AZURE_CLIENT_SECRET }}
-          ARM_TENANT_ID:       ${{ secrets.AZURE_TENANT_ID }}
-          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-        run: terraform apply -auto-approve -input=false -var-file="dev.tfvars"
-      - name: Export Terraform Outputs
-        id: tf_out
-        run: |
-          get() { terraform output -raw "$1" 2>/dev/null || echo ""; }
-          echo "rg_name=$(get resource_group_name)" >> $GITHUB_OUTPUT
-          echo "asp_name=$(get app_service_plan)" >> $GITHUB_OUTPUT
-          echo "app_name=$(get app_service_name)" >> $GITHUB_OUTPUT
-          echo "acr_name=$(get acr_name)" >> $GITHUB_OUTPUT
-          echo "acr_login_server=$(get acr_login_server)" >> $GITHUB_OUTPUT
-
-  docker-build-push:
-    runs-on: ubuntu-latest
-    needs: terraform-deploy-infra
-    if: needs.terraform-deploy-infra.outputs.acr_login_server != ''
     env:
-      ACR_NAME:         ${{ needs.terraform-deploy-infra.outputs.acr_name }}
-      ACR_LOGIN_SERVER: ${{ needs.terraform-deploy-infra.outputs.acr_login_server }}
+      ACR_NAME: team1acrauto123
+      ACR_LOGIN_SERVER: team1acrauto123.azurecr.io
+      RG_NAME: team1-rg-auto
+      APP_NAME: team1-webapp-auto
+
     steps:
-      - uses: actions/checkout@v4
-      - name: Azure Login
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to Azure
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
+
       - name: ACR Login
-        run: az acr login -n "$ACR_NAME"
-      - name: Build + Push frontend
-        run: |
-          docker build -t $ACR_LOGIN_SERVER/frontend:latest ./application/frontend
-          docker push $ACR_LOGIN_SERVER/frontend:latest
-      - name: Build + Push api
+        run: az acr login --name $ACR_NAME
+
+      - name: Docker Build & Push
         run: |
           docker build -t $ACR_LOGIN_SERVER/api:latest ./application/api
-          docker push $ACR_LOGIN_SERVER/api:latest
-      - name: Build + Push db-seed
-        run: |
+          docker build -t $ACR_LOGIN_SERVER/frontend:latest ./application/frontend
           docker build -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
+
+          docker push $ACR_LOGIN_SERVER/api:latest
+          docker push $ACR_LOGIN_SERVER/frontend:latest
           docker push $ACR_LOGIN_SERVER/db-seed:latest
 
-  appservice-deploy:
-    runs-on: ubuntu-latest
-    needs: [docker-build-push, terraform-deploy-infra]
-    env:
-      RG_NAME:  ${{ needs.terraform-deploy-infra.outputs.rg_name }}
-      APP_NAME: ${{ needs.terraform-deploy-infra.outputs.app_name }}
-      ACR_NAME: ${{ needs.terraform-deploy-infra.outputs.acr_name }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Azure Login
-        uses: azure/login@v1
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
-      - name: Enable Managed Identity
-        run: az webapp identity assign -g "$RG_NAME" -n "$APP_NAME"
       - name: Assign AcrPull Role
         run: |
-          PRINCIPAL_ID=$(az webapp identity show -g "$RG_NAME" -n "$APP_NAME" --query principalId -o tsv)
-          ACR_ID=$(az acr show -n "$ACR_NAME" --query id -o tsv)
+          PRINCIPAL_ID=$(az webapp identity show -g $RG_NAME -n $APP_NAME --query principalId -o tsv)
+          ACR_ID=$(az acr show -n $ACR_NAME --query id -o tsv)
           az role assignment create \
-            --assignee-object-id "$PRINCIPAL_ID" \
+            --assignee-object-id $PRINCIPAL_ID \
             --assignee-principal-type ServicePrincipal \
             --role "AcrPull" \
-            --scope "$ACR_ID" || echo "Role already exists"
-      - name: Apply docker-compose
+            --scope $ACR_ID || echo "Role already exists"
+
+      - name: Deploy Multi-Container Compose to Web App
         run: |
           az webapp config container set \
-            --resource-group "$RG_NAME" \
-            --name "$APP_NAME" \
+            --resource-group $RG_NAME \
+            --name $APP_NAME \
             --multicontainer-config-type compose \
             --multicontainer-config-file application/docker-compose.webapp.yml
