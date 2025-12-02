@@ -8,6 +8,9 @@ on:
 
 jobs:
 
+  # ---------------------------------------------------------
+  # 1) TEST JOB
+  # ---------------------------------------------------------
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -17,6 +20,7 @@ jobs:
     defaults:
       run:
         working-directory: application/${{ matrix.project }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -41,6 +45,9 @@ jobs:
           echo "Linting API..."
           grep -rIn '[^;]$' . --include=*.js || echo "Lint OK"
 
+  # ---------------------------------------------------------
+  # 2) TERRAFORM DEPLOY
+  # ---------------------------------------------------------
   terraform-deploy-infra:
     runs-on: ubuntu-latest
     needs: test
@@ -99,6 +106,9 @@ jobs:
           echo "acr_name=$(get acr_name)" >> $GITHUB_OUTPUT
           echo "acr_login_server=$(get acr_login_server)" >> $GITHUB_OUTPUT
 
+  # ---------------------------------------------------------
+  # 3) BUILD & PUSH DOCKER IMAGES TO ACR
+  # ---------------------------------------------------------
   docker-build-push:
     runs-on: ubuntu-latest
     needs: terraform-deploy-infra
@@ -130,11 +140,14 @@ jobs:
           docker build -t $ACR_LOGIN_SERVER/api:latest ./application/api
           docker push $ACR_LOGIN_SERVER/api:latest
 
-      - name: Build + Push db-seed
+      - name: Build + Push edge
         run: |
-          docker build -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
-          docker push $ACR_LOGIN_SERVER/db-seed:latest
+          docker build -t $ACR_LOGIN_SERVER/edge:latest ./application/edge
+          docker push $ACR_LOGIN_SERVER/edge:latest
 
+  # ---------------------------------------------------------
+  # 4) DEPLOY DOCKER-COMPOSE TO APP SERVICE
+  # ---------------------------------------------------------
   appservice-deploy:
     runs-on: ubuntu-latest
     needs: [docker-build-push, terraform-deploy-infra]
@@ -165,10 +178,13 @@ jobs:
             --role "AcrPull" \
             --scope "$ACR_ID" || true
 
-      - name: Apply Docker Compose to App Service
+      - name: Apply docker-compose.yml
         run: |
           az webapp config container set \
             --resource-group "$RG_NAME" \
             --name "$APP_NAME" \
             --multicontainer-config-type compose \
             --multicontainer-config-file application/docker-compose.webapp.yml
+
+      - name: Restart
+        run: az webapp restart -g "$RG_NAME" -n "$APP_NAME"

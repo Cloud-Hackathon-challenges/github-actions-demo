@@ -7,8 +7,6 @@ services:
       PORT: "4000"
       MONGO_URI: "${COSMOS_MONGO_URI}"
     restart: always
-    ports:
-      - "4000:4000"
 
   frontend:
     image: team1acraauto123.azurecr.io/frontend:latest
@@ -16,8 +14,6 @@ services:
       API_HOST: api
       API_PORT: "4000"
     restart: always
-    ports:
-      - "3000:3000"
 
   edge:
     image: team1acraauto123.azurecr.io/edge:latest
