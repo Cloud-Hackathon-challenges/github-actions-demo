@@ -50,7 +50,7 @@ resource "azurerm_service_plan" "asp" {
 
 #---------------------------------------------------------
 # Web App — Multi-Container (Docker Compose)
-#----------------------------------------------------------
+#---------------------------------------------------------
 resource "azurerm_linux_web_app" "app" {
   name                = var.app_service_name
   resource_group_name = azurerm_resource_group.rg.name
