@@ -1,4 +1,4 @@
-name: Full CI/CD - Build & Deploy Multi-Container to Azure App Service
+name: Deploy to Azure Container Apps (Compose)
 
 on:
   push:
@@ -10,53 +10,57 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      ACR_NAME: team1acrauto123
-      ACR_LOGIN_SERVER: team1acrauto123.azurecr.io
-      RG_NAME: team1-rg-auto
-      APP_NAME: team1-webapp-auto
+      ACR_NAME: ${{ secrets.ACR_NAME }}
+      ACR_LOGIN_SERVER: ${{ secrets.ACR_LOGIN_SERVER }}
+      RG_NAME: ${{ secrets.RG_NAME }}
+      ACA_ENVIRONMENT: ${{ secrets.ACA_ENV }}
+      ACA_APP_NAME: ${{ secrets.ACA_APP_NAME }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
 
-      - name: Login to Azure
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Azure Login
         uses: azure/login@v1
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      - name: Verify ACR Exists
-        run: |
-          echo "Checking ACR..."
-          az acr show -n $ACR_NAME -g $RG_NAME || (echo "ACR NOT FOUND!" && exit 1)
-
       - name: ACR Login
-        run: |
-          az acr login --name $ACR_NAME
+        run: az acr login --name $ACR_NAME
 
-      - name: Docker Build & Push
+      - name: Build & Push Docker Images
         run: |
           docker build -t $ACR_LOGIN_SERVER/api:latest ./application/api
           docker build -t $ACR_LOGIN_SERVER/frontend:latest ./application/frontend
+          docker build -t $ACR_LOGIN_SERVER/mongo:latest ./application/mongo
           docker build -t $ACR_LOGIN_SERVER/db-seed:latest ./application/db-seed
 
           docker push $ACR_LOGIN_SERVER/api:latest
           docker push $ACR_LOGIN_SERVER/frontend:latest
+          docker push $ACR_LOGIN_SERVER/mongo:latest
           docker push $ACR_LOGIN_SERVER/db-seed:latest
 
-      - name: Assign AcrPull Role
+      - name: Assign AcrPull to ACA Identity
         run: |
-          PRINCIPAL_ID=$(az webapp identity show -g $RG_NAME -n $APP_NAME --query principalId -o tsv)
+          ACA_ID=$(az containerapp show -g $RG_NAME -n $ACA_APP_NAME --query identity.principalId -o tsv)
           ACR_ID=$(az acr show -n $ACR_NAME --query id -o tsv)
-          az role assignment create \
-            --assignee-object-id $PRINCIPAL_ID \
-            --assignee-principal-type ServicePrincipal \
-            --role "AcrPull" \
-            --scope $ACR_ID || echo "Role already exists"
 
-      - name: Deploy Multi-Container Compose to Web App
+          az role assignment create \
+            --assignee $ACA_ID \
+            --role "AcrPull" \
+            --scope $ACR_ID \
+            --assignee-principal-type ServicePrincipal || true
+
+      - name: Deploy Compose to Container Apps
         run: |
-          az webapp config container set \
-            --resource-group $RG_NAME \
-            --name $APP_NAME \
-            --multicontainer-config-type compose \
-            --multicontainer-config-file application/docker-compose.webapp.yml
+          az containerapp compose create \
+            -g $RG_NAME \
+            --environment $ACA_ENVIRONMENT \
+            --name $ACA_APP_NAME \
+            --file application/docker-compose.webapp.yml \
+            --registry-server $ACR_LOGIN_SERVER \
+            --registry-identity system
+
+      - name: Show deployed container apps
+        run: az containerapp list -g $RG_NAME -o table
