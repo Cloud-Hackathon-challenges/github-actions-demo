@@ -1,4 +1,4 @@
-pleasname: CI/CD - App Service + Terraform + Docker
+name: CI/CD - App Service + Terraform + Docker
 
 on:
   push:
