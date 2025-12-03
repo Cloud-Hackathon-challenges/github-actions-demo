@@ -2,21 +2,22 @@ version: "3.8"
 
 services:
   api:
-    image: team1acraauto123.azurecr.io/api:latest
+    image: ${ACR_SERVER}/api:latest
+    targetPort: 4000
+    ingress: false
     environment:
       PORT: "4000"
-      MONGO_URI: "${COSMOS_MONGO_URI}"
-    restart: always
+      MONGO_URI: "mongodb://placeholder"
 
   frontend:
-    image: team1acraauto123.azurecr.io/frontend:latest
+    image: ${ACR_SERVER}/frontend:latest
+    targetPort: 3000
+    ingress: true
     environment:
-      API_HOST: api
+      API_HOST: "api"
       API_PORT: "4000"
-    restart: always
 
   edge:
-    image: team1acraauto123.azurecr.io/edge:latest
-    ports:
-      - "80:80"
-    restart: always
+    image: ${ACR_SERVER}/edge:latest
+    targetPort: 80
+    ingress: true
